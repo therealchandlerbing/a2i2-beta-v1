@@ -37,24 +37,47 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Union
 from enum import Enum
-import traceback
 
-from knowledge_operations import (
-    KnowledgeRepository,
-    PatternOutcome,
-    TaskComplexity,
-    ToolInvocation,
-    MemoryType,
-)
-from model_router import ModelRouter, RoutingDecision, TaskComplexity as RouterComplexity
-from context_budget import (
-    ContextBudgetManager,
-    BudgetAllocation,
-    PackedContext,
-    ContextPayload,
-    RankingStrategy,
-    PackingStrategy,
-)
+# Import dependencies with fallback for standalone testing
+try:
+    from knowledge_operations import (
+        KnowledgeRepository,
+        PatternOutcome,
+        TaskComplexity,
+        ToolInvocation,
+        MemoryType,
+    )
+except ImportError:
+    # Provide stubs for standalone testing
+    KnowledgeRepository = None
+    PatternOutcome = None
+    TaskComplexity = None
+    ToolInvocation = None
+    MemoryType = None
+
+try:
+    from model_router import ModelRouter, RoutingDecision, TaskComplexity as RouterComplexity
+except ImportError:
+    ModelRouter = None
+    RoutingDecision = None
+    RouterComplexity = None
+
+try:
+    from context_budget import (
+        ContextBudgetManager,
+        BudgetAllocation,
+        PackedContext,
+        ContextPayload,
+        RankingStrategy,
+        PackingStrategy,
+    )
+except ImportError:
+    ContextBudgetManager = None
+    BudgetAllocation = None
+    PackedContext = None
+    ContextPayload = None
+    RankingStrategy = None
+    PackingStrategy = None
 
 
 # =============================================================================
@@ -159,6 +182,7 @@ class SkillExecutionResult:
     skill_name: str
     capability: str
     status: ExecutionStatus
+    inputs: Optional[Dict[str, Any]] = None  # Input parameters used
     output: Optional[Any] = None
     error: Optional[str] = None
 
@@ -185,6 +209,7 @@ class SkillExecutionResult:
             "skill_name": self.skill_name,
             "capability": self.capability,
             "status": self.status.value,
+            "inputs": self.inputs,
             "output": self.output,
             "error": self.error,
             "latency_ms": self.latency_ms,
@@ -343,11 +368,20 @@ class SkillExecutor:
 
     def __init__(
         self,
-        repository: Optional[KnowledgeRepository] = None,
-        router: Optional[ModelRouter] = None
+        repository: Optional["KnowledgeRepository"] = None,
+        router: Optional["ModelRouter"] = None
     ):
-        self.repository = repository or KnowledgeRepository()
-        self.router = router or ModelRouter(repository=self.repository)
+        # Handle case where dependencies are not available
+        if KnowledgeRepository is not None:
+            self.repository = repository or KnowledgeRepository()
+        else:
+            self.repository = repository
+
+        if ModelRouter is not None and self.repository is not None:
+            self.router = router or ModelRouter(repository=self.repository)
+        else:
+            self.router = router
+
         self._handlers: Dict[str, Callable] = {}
 
     def register_handler(self, skill_name: str, handler: Callable) -> None:
@@ -379,6 +413,7 @@ class SkillExecutor:
             skill_name=request.skill_name,
             capability=request.capability,
             status=ExecutionStatus.RUNNING,
+            inputs=request.inputs,
             started_at=started_at.isoformat()
         )
 
@@ -599,9 +634,9 @@ class SkillOrchestrator:
 
     def __init__(
         self,
-        repository: Optional[KnowledgeRepository] = None,
-        router: Optional[ModelRouter] = None,
-        budget_manager: Optional[ContextBudgetManager] = None
+        repository: Optional["KnowledgeRepository"] = None,
+        router: Optional["ModelRouter"] = None,
+        budget_manager: Optional["ContextBudgetManager"] = None
     ):
         """
         Initialize the skill orchestrator.
@@ -611,9 +646,22 @@ class SkillOrchestrator:
             router: Model router for selection
             budget_manager: Context budget manager
         """
-        self.repository = repository or KnowledgeRepository()
-        self.router = router or ModelRouter(repository=self.repository)
-        self.budget_manager = budget_manager or ContextBudgetManager()
+        # Handle case where dependencies are not available
+        if KnowledgeRepository is not None:
+            self.repository = repository or KnowledgeRepository()
+        else:
+            self.repository = repository
+
+        if ModelRouter is not None and self.repository is not None:
+            self.router = router or ModelRouter(repository=self.repository)
+        else:
+            self.router = router
+
+        if ContextBudgetManager is not None:
+            self.budget_manager = budget_manager or ContextBudgetManager()
+        else:
+            self.budget_manager = budget_manager
+
         self.registry = SkillRegistry()
         self.executor = SkillExecutor(repository=self.repository, router=self.router)
 

@@ -21,6 +21,46 @@ from uuid import uuid4
 import hashlib
 import math
 
+from common import STOPWORDS
+
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+# Embedding configuration defaults
+DEFAULT_EMBEDDING_DIMENSIONS = 1536
+DEFAULT_BATCH_SIZE = 100
+DEFAULT_MAX_TOKENS_PER_BATCH = 8000
+DEFAULT_CACHE_TTL_HOURS = 168         # 1 week
+DEFAULT_MAX_TEXT_LENGTH = 8000        # Characters
+
+# Search configuration
+DEFAULT_TOP_K = 10
+HYBRID_SEARCH_VECTOR_WEIGHT = 0.7
+HYBRID_SEARCH_KEYWORD_WEIGHT = 0.3
+MIN_TERM_LENGTH = 2                   # Minimum word length for keyword index
+
+# Clustering defaults
+DEFAULT_NUM_CLUSTERS = 5
+DEFAULT_KMEANS_MAX_ITERATIONS = 10
+
+# Cost calculation (per 1M tokens)
+COST_PER_MILLION_TOKENS = {
+    "text-embedding-3-small": 0.02,
+    "text-embedding-3-large": 0.13,
+    "voyage-3": 0.06,
+    "voyage-code-3": 0.06,
+    "voyage-3-lite": 0.02,
+    "embed-english-v3.0": 0.10,
+    "embed-multilingual-v3.0": 0.10,
+    "all-MiniLM-L6-v2": 0.0,
+    "all-mpnet-base-v2": 0.0,
+}
+
+# Token estimation (rough approximation)
+CHARS_PER_TOKEN = 4
+
 
 class EmbeddingProvider(Enum):
     """Available embedding providers."""
@@ -58,20 +98,20 @@ class EmbeddingConfig:
     model: EmbeddingModel = EmbeddingModel.OPENAI_SMALL
 
     # Dimensions (model-specific)
-    dimensions: int = 1536
+    dimensions: int = DEFAULT_EMBEDDING_DIMENSIONS
 
     # Batching
-    batch_size: int = 100
-    max_tokens_per_batch: int = 8000
+    batch_size: int = DEFAULT_BATCH_SIZE
+    max_tokens_per_batch: int = DEFAULT_MAX_TOKENS_PER_BATCH
 
     # Caching
     cache_enabled: bool = True
-    cache_ttl_hours: int = 168  # 1 week
+    cache_ttl_hours: int = DEFAULT_CACHE_TTL_HOURS
 
     # Optimization
     normalize_embeddings: bool = True
     truncate_long_texts: bool = True
-    max_text_length: int = 8000  # Characters
+    max_text_length: int = DEFAULT_MAX_TEXT_LENGTH
 
     # Cost tracking
     track_costs: bool = True
@@ -244,7 +284,7 @@ class VectorIndex:
     def search(
         self,
         query_vector: List[float],
-        top_k: int = 10,
+        top_k: int = DEFAULT_TOP_K,
         memory_types: Optional[List[str]] = None,
         min_score: float = 0.0,
         filters: Optional[Dict[str, Any]] = None
@@ -408,7 +448,7 @@ class KeywordIndex:
     def search(
         self,
         query: str,
-        top_k: int = 10,
+        top_k: int = DEFAULT_TOP_K,
         memory_types: Optional[List[str]] = None
     ) -> List[Tuple[str, float, List[str]]]:
         """
@@ -458,16 +498,8 @@ class KeywordIndex:
         text = text.lower()
         words = re.findall(r'\b[a-z0-9]+\b', text)
 
-        # Remove stopwords
-        stopwords = {
-            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to",
-            "for", "of", "with", "by", "from", "as", "is", "was", "are",
-            "were", "been", "be", "have", "has", "had", "do", "does", "did",
-            "will", "would", "could", "should", "may", "might", "must",
-            "this", "that", "these", "those", "it", "its", "they", "them",
-        }
-
-        return set(w for w in words if w not in stopwords and len(w) > 2)
+        # Remove stopwords (using shared STOPWORDS)
+        return set(w for w in words if w not in STOPWORDS and len(w) > MIN_TERM_LENGTH)
 
 
 class EmbeddingService:
@@ -489,17 +521,17 @@ class EmbeddingService:
         self.cache = EmbeddingCache(self.config.cache_ttl_hours)
         self.stats = EmbeddingStats()
 
-        # Model costs (per 1M tokens)
+        # Model costs (per 1M tokens) - using enum values as keys for compatibility
         self.model_costs = {
-            EmbeddingModel.OPENAI_SMALL: 0.02,
-            EmbeddingModel.OPENAI_LARGE: 0.13,
-            EmbeddingModel.VOYAGE_3: 0.06,
-            EmbeddingModel.VOYAGE_CODE: 0.06,
-            EmbeddingModel.VOYAGE_LITE: 0.02,
-            EmbeddingModel.COHERE_ENGLISH: 0.10,
-            EmbeddingModel.COHERE_MULTILINGUAL: 0.10,
-            EmbeddingModel.LOCAL_MINILM: 0.0,
-            EmbeddingModel.LOCAL_MPNET: 0.0,
+            EmbeddingModel.OPENAI_SMALL: COST_PER_MILLION_TOKENS["text-embedding-3-small"],
+            EmbeddingModel.OPENAI_LARGE: COST_PER_MILLION_TOKENS["text-embedding-3-large"],
+            EmbeddingModel.VOYAGE_3: COST_PER_MILLION_TOKENS["voyage-3"],
+            EmbeddingModel.VOYAGE_CODE: COST_PER_MILLION_TOKENS["voyage-code-3"],
+            EmbeddingModel.VOYAGE_LITE: COST_PER_MILLION_TOKENS["voyage-3-lite"],
+            EmbeddingModel.COHERE_ENGLISH: COST_PER_MILLION_TOKENS["embed-english-v3.0"],
+            EmbeddingModel.COHERE_MULTILINGUAL: COST_PER_MILLION_TOKENS["embed-multilingual-v3.0"],
+            EmbeddingModel.LOCAL_MINILM: COST_PER_MILLION_TOKENS["all-MiniLM-L6-v2"],
+            EmbeddingModel.LOCAL_MPNET: COST_PER_MILLION_TOKENS["all-mpnet-base-v2"],
         }
 
     async def embed_text(self, text: str) -> EmbeddingResult:
@@ -561,8 +593,8 @@ class EmbeddingService:
 
             # Create results and cache
             for i, (text, embedding) in enumerate(zip(texts_to_embed, embeddings)):
-                # Estimate tokens (rough: ~4 chars per token)
-                tokens = len(text) // 4
+                # Estimate tokens
+                tokens = len(text) // CHARS_PER_TOKEN
 
                 # Calculate cost
                 cost = self._calculate_cost(tokens)
@@ -682,8 +714,8 @@ class SemanticSearchEngine:
         self.keyword_index = KeywordIndex()
 
         # Hybrid search weights
-        self.vector_weight = 0.7
-        self.keyword_weight = 0.3
+        self.vector_weight = HYBRID_SEARCH_VECTOR_WEIGHT
+        self.keyword_weight = HYBRID_SEARCH_KEYWORD_WEIGHT
 
     async def index_memory(
         self,
@@ -766,7 +798,7 @@ class SemanticSearchEngine:
     async def search(
         self,
         query: str,
-        top_k: int = 10,
+        top_k: int = DEFAULT_TOP_K,
         memory_types: Optional[List[str]] = None,
         min_score: float = 0.0,
         filters: Optional[Dict[str, Any]] = None,
@@ -914,7 +946,7 @@ class SemanticSearchEngine:
     async def find_similar(
         self,
         item_id: str,
-        top_k: int = 10,
+        top_k: int = DEFAULT_TOP_K,
         memory_types: Optional[List[str]] = None,
         exclude_self: bool = True
     ) -> List[SearchResult]:
@@ -952,7 +984,7 @@ class SemanticSearchEngine:
     async def cluster_memories(
         self,
         memory_type: Optional[str] = None,
-        num_clusters: int = 5
+        num_clusters: int = DEFAULT_NUM_CLUSTERS
     ) -> Dict[int, List[str]]:
         """
         Cluster memories by semantic similarity.
@@ -991,7 +1023,7 @@ class SemanticSearchEngine:
         self,
         vectors: List[List[float]],
         k: int,
-        max_iterations: int = 10
+        max_iterations: int = DEFAULT_KMEANS_MAX_ITERATIONS
     ) -> List[int]:
         """Simple k-means clustering."""
         import random

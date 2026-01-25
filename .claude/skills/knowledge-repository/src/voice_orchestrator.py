@@ -21,6 +21,48 @@ from uuid import uuid4
 import asyncio
 import time
 
+from common import STOPWORDS
+
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+# Latency targets (milliseconds)
+TARGET_FIRST_RESPONSE_MS = 250        # PersonaPlex target for first audible response
+TARGET_COMPLETE_RESPONSE_MS = 2000    # Target for full response
+DEFAULT_STREAMING_CHUNK_MS = 100      # Default chunk interval for streaming
+
+# VNKG retrieval settings
+DEFAULT_MAX_VNKG_RESULTS = 3          # Maximum VNKG entries to return
+DEFAULT_VNKG_LATENCY_BUDGET_MS = 100  # Time budget for VNKG retrieval
+
+# Confidence thresholds
+MIN_CONFIDENCE_IMMEDIATE = 0.7        # Minimum confidence for immediate response
+MIN_CONFIDENCE_STREAMING = 0.5        # Minimum confidence for streaming response
+MIN_VNKG_BREVITY_SCORE = 0.7          # Minimum brevity score for VNKG voice response
+
+# Proactive preparation
+DEFAULT_PREP_CACHE_TTL_SECONDS = 300  # 5 minute TTL for prepared responses
+DEFAULT_ANTICIPATION_WINDOW_MS = 500  # Time window for follow-up anticipation
+
+# Intent classification confidence scores
+CONFIDENCE_QUICK_ANSWER = 0.9
+CONFIDENCE_RECALL = 0.85
+CONFIDENCE_COMMAND = 0.8
+CONFIDENCE_COMPLEX_QUERY = 0.75
+CONFIDENCE_CLARIFICATION = 0.6
+CONFIDENCE_CONVERSATION = 0.5
+
+# Voice-optimized brevity thresholds
+BREVITY_IDEAL_MIN_WORDS = 15
+BREVITY_IDEAL_MAX_WORDS = 30
+
+# Skill routing thresholds
+MIN_SKILL_PRIORITY_SCORE = 0.3        # Minimum priority to consider a skill
+HIGH_QUALITY_PRIORITY_SCORE = 0.8     # Priority indicating high-quality response
+MIN_RESPONSE_LENGTH_CHARS = 20        # Minimum response length to consider complete
+
 
 class VoiceProvider(Enum):
     """Available voice providers with their characteristics."""
@@ -52,9 +94,9 @@ class VoiceConfig:
     """Configuration for voice-optimized orchestration."""
 
     # Latency targets (ms)
-    max_first_response_ms: int = 250     # First audible response
-    max_complete_response_ms: int = 2000  # Full response
-    streaming_chunk_ms: int = 100         # Chunk interval for streaming
+    max_first_response_ms: int = TARGET_FIRST_RESPONSE_MS
+    max_complete_response_ms: int = TARGET_COMPLETE_RESPONSE_MS
+    streaming_chunk_ms: int = DEFAULT_STREAMING_CHUNK_MS
 
     # Provider preferences
     primary_provider: VoiceProvider = VoiceProvider.PERSONAPLEX
@@ -80,12 +122,12 @@ class VoiceConfig:
 
     # Proactive features
     enable_proactive_prep: bool = True
-    prep_cache_ttl_seconds: int = 300    # 5 min cache for prepared responses
-    anticipation_window_ms: int = 500    # Time to anticipate follow-ups
+    prep_cache_ttl_seconds: int = DEFAULT_PREP_CACHE_TTL_SECONDS
+    anticipation_window_ms: int = DEFAULT_ANTICIPATION_WINDOW_MS
 
     # Quality thresholds
-    min_confidence_for_immediate: float = 0.7
-    min_confidence_for_streaming: float = 0.5
+    min_confidence_for_immediate: float = MIN_CONFIDENCE_IMMEDIATE
+    min_confidence_for_streaming: float = MIN_CONFIDENCE_STREAMING
 
 
 @dataclass
@@ -255,26 +297,26 @@ class IntentClassifier:
         # Check patterns in order of priority
         for pattern in self.QUICK_PATTERNS:
             if text.startswith(pattern) or f" {pattern}" in text:
-                return VoiceIntent.QUICK_ANSWER, 0.9
+                return VoiceIntent.QUICK_ANSWER, CONFIDENCE_QUICK_ANSWER
 
         for pattern in self.RECALL_PATTERNS:
             if pattern in text:
-                return VoiceIntent.RECALL, 0.85
+                return VoiceIntent.RECALL, CONFIDENCE_RECALL
 
         for pattern in self.COMMAND_PATTERNS:
             if pattern in text:
-                return VoiceIntent.COMMAND, 0.8
+                return VoiceIntent.COMMAND, CONFIDENCE_COMMAND
 
         for pattern in self.COMPLEX_PATTERNS:
             if pattern in text:
-                return VoiceIntent.COMPLEX_QUERY, 0.75
+                return VoiceIntent.COMPLEX_QUERY, CONFIDENCE_COMPLEX_QUERY
 
         # Check for clarification (short, question-like)
         if len(text.split()) < 5 and text.endswith("?"):
-            return VoiceIntent.CLARIFICATION, 0.6
+            return VoiceIntent.CLARIFICATION, CONFIDENCE_CLARIFICATION
 
         # Default to conversation
-        return VoiceIntent.CONVERSATION, 0.5
+        return VoiceIntent.CONVERSATION, CONFIDENCE_CONVERSATION
 
 
 class VoiceSkillRouter:
@@ -427,8 +469,8 @@ class VNKGManager:
         self,
         query: str,
         entities: Optional[List[str]] = None,
-        max_results: int = 3,
-        max_latency_ms: int = 100
+        max_results: int = DEFAULT_MAX_VNKG_RESULTS,
+        max_latency_ms: int = DEFAULT_VNKG_LATENCY_BUDGET_MS
     ) -> List[VNKGEntry]:
         """
         Retrieve VNKG entries optimized for voice response.
@@ -532,17 +574,14 @@ class VNKGManager:
 
     def _calculate_brevity(self, original: str, spoken: str) -> float:
         """Calculate brevity score (0-1, higher = more concise)."""
-        original_words = len(original.split())
         spoken_words = len(spoken.split())
 
-        # Ideal length for voice is 15-30 words
-        ideal_min, ideal_max = 15, 30
-
-        if spoken_words < ideal_min:
+        # Ideal length for voice
+        if spoken_words < BREVITY_IDEAL_MIN_WORDS:
             return 0.8  # Too short might lack context
-        elif spoken_words <= ideal_max:
+        elif spoken_words <= BREVITY_IDEAL_MAX_WORDS:
             return 1.0  # Ideal range
-        elif spoken_words <= ideal_max * 2:
+        elif spoken_words <= BREVITY_IDEAL_MAX_WORDS * 2:
             return 0.7  # Moderately long
         else:
             return 0.4  # Too long for voice
@@ -553,14 +592,8 @@ class VNKGManager:
         import re
         words = re.findall(r'\b[a-zA-Z]{4,}\b', content.lower())
 
-        # Remove common words
-        stopwords = {
-            "this", "that", "with", "from", "have", "been",
-            "were", "they", "their", "about", "would", "could",
-            "should", "there", "where", "which", "while",
-        }
-
-        keywords = [w for w in words if w not in stopwords]
+        # Remove stopwords
+        keywords = [w for w in words if w not in STOPWORDS]
 
         # Return unique keywords, preserving order
         seen = set()
@@ -829,10 +862,10 @@ class VoiceOrchestrator:
             vnkg_results = self.vnkg.retrieve_for_voice(
                 query.text,
                 entities=query.active_entities,
-                max_latency_ms=100,
+                max_latency_ms=DEFAULT_VNKG_LATENCY_BUDGET_MS,
             )
 
-            if vnkg_results and vnkg_results[0].brevity_score >= 0.7:
+            if vnkg_results and vnkg_results[0].brevity_score >= MIN_VNKG_BREVITY_SCORE:
                 first_latency = int((time.time() - start_time) * 1000)
                 chunk = VoiceResponseChunk(
                     chunk_id=str(uuid4()),
@@ -947,7 +980,7 @@ class VoiceOrchestrator:
         # Stream execution
         sequence = 0
         for skill_name, priority in skill_priorities[:3]:  # Top 3 skills
-            if priority < 0.3:  # Skip low-priority skills
+            if priority < MIN_SKILL_PRIORITY_SCORE:  # Skip low-priority skills
                 continue
 
             # Execute skill (placeholder - integrate with real skill executor)
@@ -968,7 +1001,7 @@ class VoiceOrchestrator:
                 sequence += 1
 
                 # Check if we should stop (good enough response)
-                if priority >= 0.8 and len(result) > 20:
+                if priority >= HIGH_QUALITY_PRIORITY_SCORE and len(result) > MIN_RESPONSE_LENGTH_CHARS:
                     break
 
         # Send final chunk
@@ -1086,7 +1119,7 @@ class VoiceOrchestrator:
         start_time = time.time()
 
         for skill_name, priority in skill_priorities[:3]:
-            if priority < 0.3:
+            if priority < MIN_SKILL_PRIORITY_SCORE:
                 continue
 
             result = await self._execute_skill(skill_name, query, context)

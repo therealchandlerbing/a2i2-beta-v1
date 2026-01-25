@@ -1367,14 +1367,15 @@ export interface GenerationConfig {
 // PHASE 3: AUTONOMY TRUST ENGINE TYPES
 // ============================================================================
 
+// Trust categories aligned with database schema
 export type TrustCategory =
-  | 'knowledge_operations'
-  | 'code_operations'
-  | 'file_operations'
-  | 'communication'
-  | 'system_operations'
-  | 'financial_operations'
-  | 'research';
+  | 'read'           // Read operations (file reads, knowledge recall)
+  | 'write'          // Write operations (file writes, knowledge capture)
+  | 'execute'        // Execution operations (code, commands)
+  | 'communicate'    // Communication operations (emails, messages)
+  | 'schedule'       // Scheduling operations (calendar, reminders)
+  | 'financial'      // Financial operations (purchases, approvals)
+  | 'system';        // System operations (config, settings)
 
 export type AutonomyLevelName = 'assisted' | 'supervised' | 'autonomous' | 'trusted' | 'partner';
 
