@@ -1,0 +1,541 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Gemini Integration Configuration for A2I2. Configure Google Gemini models for multimodal analysis, image generation, and grounded search capabilities.",
+  "version": "1.0.0",
+  "lastUpdated": "2026-01-25",
+
+  "instructions": {
+    "setup": [
+      "1. Get API key from https://aistudio.google.com/apikey",
+      "2. Set GEMINI_API_KEY environment variable",
+      "3. Install SDK: pip install google-genai (Python) or npm install @google/genai (Node.js)",
+      "4. Configure model selection based on your use case"
+    ],
+    "documentation": "https://ai.google.dev/gemini-api/docs"
+  },
+
+  "environment": {
+    "required": {
+      "GEMINI_API_KEY": {
+        "description": "Google AI Studio API key",
+        "type": "string",
+        "sensitive": true,
+        "obtainFrom": "https://aistudio.google.com/apikey"
+      }
+    },
+    "optional": {
+      "GEMINI_DEFAULT_MODEL": {
+        "description": "Default model for general requests",
+        "type": "string",
+        "default": "gemini-3-flash-preview",
+        "allowedValues": [
+          "gemini-3-pro-preview",
+          "gemini-3-flash-preview",
+          "gemini-2.5-pro",
+          "gemini-2.5-flash"
+        ]
+      },
+      "GEMINI_THINKING_LEVEL": {
+        "description": "Default thinking depth for reasoning tasks",
+        "type": "string",
+        "default": "high",
+        "allowedValues": ["minimal", "low", "medium", "high"]
+      },
+      "GEMINI_TEMPERATURE": {
+        "description": "Model temperature (recommended: 1.0 for Gemini 3)",
+        "type": "number",
+        "default": 1.0,
+        "min": 0.0,
+        "max": 2.0,
+        "note": "Gemini 3 is optimized for temperature=1.0. Changing may cause issues."
+      }
+    }
+  },
+
+  "models": {
+    "gemini3": {
+      "pro": {
+        "id": "gemini-3-pro-preview",
+        "description": "Most intelligent model, best for complex reasoning and agentic tasks",
+        "inputTokenLimit": 1048576,
+        "outputTokenLimit": 65536,
+        "knowledgeCutoff": "2025-01",
+        "pricing": {
+          "input": { "under200k": 2.0, "over200k": 4.0 },
+          "output": { "under200k": 12.0, "over200k": 18.0 },
+          "unit": "per 1M tokens"
+        },
+        "capabilities": {
+          "thinking": true,
+          "functionCalling": true,
+          "codeExecution": true,
+          "searchGrounding": true,
+          "urlContext": true,
+          "caching": true,
+          "batchApi": true,
+          "fileSearch": true,
+          "imageGeneration": false
+        },
+        "thinkingConfig": {
+          "type": "level",
+          "supportedLevels": ["low", "high"],
+          "default": "high",
+          "note": "Gemini 3 Pro only supports low and high thinking levels"
+        },
+        "bestFor": ["complex reasoning", "agentic workflows", "vibe-coding", "STEM analysis"]
+      },
+      "flash": {
+        "id": "gemini-3-flash-preview",
+        "description": "Pro-level intelligence at Flash speed and pricing",
+        "inputTokenLimit": 1048576,
+        "outputTokenLimit": 65536,
+        "knowledgeCutoff": "2025-01",
+        "pricing": {
+          "input": 0.50,
+          "output": 3.0,
+          "unit": "per 1M tokens"
+        },
+        "capabilities": {
+          "thinking": true,
+          "functionCalling": true,
+          "codeExecution": true,
+          "searchGrounding": true,
+          "urlContext": true,
+          "caching": true,
+          "batchApi": true,
+          "fileSearch": true,
+          "imageGeneration": false
+        },
+        "thinkingConfig": {
+          "type": "level",
+          "supportedLevels": ["minimal", "low", "medium", "high"],
+          "default": "high",
+          "note": "Gemini 3 Flash supports all thinking levels including minimal and medium"
+        },
+        "bestFor": ["balanced speed/quality", "high-volume tasks", "general analysis"]
+      },
+      "proImage": {
+        "id": "gemini-3-pro-image-preview",
+        "description": "Highest quality image generation model",
+        "inputTokenLimit": 65536,
+        "outputTokenLimit": 32768,
+        "knowledgeCutoff": "2025-01",
+        "pricing": {
+          "textInput": 2.0,
+          "imageOutput": 0.134,
+          "note": "Image pricing varies by resolution"
+        },
+        "capabilities": {
+          "thinking": true,
+          "functionCalling": false,
+          "codeExecution": false,
+          "searchGrounding": true,
+          "urlContext": false,
+          "caching": false,
+          "batchApi": true,
+          "fileSearch": false,
+          "imageGeneration": true
+        },
+        "imageConfig": {
+          "aspectRatios": ["1:1", "16:9", "9:16", "4:3", "3:4"],
+          "sizes": ["1K", "2K", "4K"]
+        },
+        "bestFor": ["image generation", "visual content", "infographics", "diagrams"]
+      }
+    },
+    "gemini25": {
+      "pro": {
+        "id": "gemini-2.5-pro",
+        "description": "Advanced thinking model for complex problems",
+        "inputTokenLimit": 1048576,
+        "outputTokenLimit": 65536,
+        "knowledgeCutoff": "2025-01",
+        "pricing": {
+          "input": { "under200k": 1.25, "over200k": 2.50 },
+          "output": { "under200k": 10.0, "over200k": 15.0 },
+          "unit": "per 1M tokens"
+        },
+        "capabilities": {
+          "thinking": true,
+          "functionCalling": true,
+          "codeExecution": true,
+          "searchGrounding": true,
+          "mapsGrounding": true,
+          "urlContext": true,
+          "caching": true,
+          "batchApi": true,
+          "fileSearch": true
+        },
+        "thinkingConfig": {
+          "type": "budget",
+          "budgetRange": { "min": 0, "max": 32768, "recommended": 8000 }
+        },
+        "bestFor": ["complex STEM", "long-form analysis", "code review"]
+      },
+      "flash": {
+        "id": "gemini-2.5-flash",
+        "description": "Best price-performance for high-volume processing",
+        "inputTokenLimit": 1048576,
+        "outputTokenLimit": 65536,
+        "knowledgeCutoff": "2025-01",
+        "pricing": {
+          "input": 0.15,
+          "output": 0.60,
+          "thinkingTokens": 0.60,
+          "unit": "per 1M tokens"
+        },
+        "capabilities": {
+          "thinking": true,
+          "functionCalling": true,
+          "codeExecution": true,
+          "searchGrounding": true,
+          "mapsGrounding": true,
+          "urlContext": true,
+          "caching": true,
+          "batchApi": true,
+          "fileSearch": true
+        },
+        "thinkingConfig": {
+          "type": "budget",
+          "budgetRange": { "min": 0, "max": 32768, "recommended": 4000 }
+        },
+        "bestFor": ["high-volume tasks", "cost-efficient processing", "batch operations"]
+      },
+      "flashLite": {
+        "id": "gemini-2.5-flash-lite",
+        "description": "Ultra-fast, cost-efficient model",
+        "inputTokenLimit": 1048576,
+        "outputTokenLimit": 65536,
+        "knowledgeCutoff": "2025-01",
+        "pricing": {
+          "input": 0.075,
+          "output": 0.30,
+          "unit": "per 1M tokens"
+        },
+        "capabilities": {
+          "thinking": true,
+          "functionCalling": true,
+          "codeExecution": true,
+          "searchGrounding": true,
+          "mapsGrounding": true,
+          "urlContext": true,
+          "caching": true,
+          "batchApi": true,
+          "fileSearch": true
+        },
+        "thinkingConfig": {
+          "type": "budget",
+          "budgetRange": { "min": 0, "max": 16384, "recommended": 2000 }
+        },
+        "bestFor": ["ultra-low latency", "simple tasks", "high throughput"]
+      },
+      "flashImage": {
+        "id": "gemini-2.5-flash-image",
+        "description": "Image generation with Flash speed",
+        "inputTokenLimit": 65536,
+        "outputTokenLimit": 32768,
+        "knowledgeCutoff": "2025-06",
+        "pricing": {
+          "textInput": 0.15,
+          "imageOutput": 0.039,
+          "note": "Image pricing per image generated"
+        },
+        "capabilities": {
+          "thinking": false,
+          "functionCalling": false,
+          "codeExecution": false,
+          "searchGrounding": false,
+          "imageGeneration": true,
+          "caching": true,
+          "batchApi": true
+        },
+        "bestFor": ["fast image generation", "creative content"]
+      },
+      "flashLive": {
+        "id": "gemini-2.5-flash-native-audio-preview-12-2025",
+        "description": "Real-time audio/video with Live API",
+        "inputTokenLimit": 131072,
+        "outputTokenLimit": 8192,
+        "knowledgeCutoff": "2025-01",
+        "pricing": {
+          "textInput": 0.15,
+          "audioInput": 0.60,
+          "textOutput": 0.60,
+          "audioOutput": 2.40,
+          "unit": "per 1M tokens",
+          "note": "Live API uses streaming pricing model"
+        },
+        "capabilities": {
+          "audioGeneration": true,
+          "functionCalling": true,
+          "searchGrounding": true,
+          "liveApi": true,
+          "thinking": true,
+          "vad": true,
+          "interruption": true,
+          "proactiveAudio": true,
+          "affectiveDialog": true
+        },
+        "voiceOptions": ["Aoede", "Charon", "Fenrir", "Kore", "Puck", "Orbit", "Sulafat", "Nova"],
+        "bestFor": ["real-time voice", "live audio/video", "conversational AI"]
+      },
+      "flashTts": {
+        "id": "gemini-2.5-flash-preview-tts",
+        "description": "Text-to-speech generation",
+        "inputTokenLimit": 8192,
+        "outputTokenLimit": 16384,
+        "knowledgeCutoff": "2025-01",
+        "pricing": {
+          "textInput": 0.15,
+          "audioOutput": 2.40,
+          "unit": "per 1M tokens"
+        },
+        "capabilities": {
+          "audioGeneration": true,
+          "batchApi": true
+        },
+        "voiceOptions": ["Aoede", "Charon", "Fenrir", "Kore", "Puck", "Orbit", "Sulafat", "Nova"],
+        "bestFor": ["audio synthesis", "voice generation"]
+      },
+      "proTts": {
+        "id": "gemini-2.5-pro-preview-tts",
+        "description": "High-quality text-to-speech",
+        "inputTokenLimit": 8192,
+        "outputTokenLimit": 16384,
+        "knowledgeCutoff": "2025-01",
+        "pricing": {
+          "textInput": 1.25,
+          "audioOutput": 10.0,
+          "unit": "per 1M tokens"
+        },
+        "capabilities": {
+          "audioGeneration": true,
+          "batchApi": true
+        },
+        "voiceOptions": ["Aoede", "Charon", "Fenrir", "Kore", "Puck", "Orbit", "Sulafat", "Nova"],
+        "bestFor": ["premium voice quality", "professional audio"]
+      }
+    },
+    "agents": {
+      "deepResearch": {
+        "id": "deep-research-pro-preview-12-2025",
+        "description": "Autonomous research agent for multi-step analysis",
+        "capabilities": {
+          "webSearch": true,
+          "fileSearch": true,
+          "urlContext": true,
+          "multimodalInput": true,
+          "streaming": true,
+          "backgroundExecution": true
+        },
+        "estimatedCost": {
+          "standardTask": "$2-3",
+          "complexTask": "$3-5"
+        },
+        "maxResearchTime": "60 minutes",
+        "bestFor": ["market analysis", "due diligence", "competitive research", "literature reviews"]
+      }
+    }
+  },
+
+  "a2i2Integration": {
+    "modelRouting": {
+      "description": "How A2I2 selects models based on task requirements",
+      "rules": [
+        {
+          "condition": "task.type === 'image_generation'",
+          "model": "gemini-3-pro-image-preview"
+        },
+        {
+          "condition": "task.needsCurrentInfo === true",
+          "model": "gemini-3-flash-preview",
+          "config": { "tools": ["google_search"] }
+        },
+        {
+          "condition": "task.contextSize > 200000",
+          "model": "gemini-3-pro-preview"
+        },
+        {
+          "condition": "task.type === 'vision' && task.complexity === 'high'",
+          "model": "gemini-3-pro-preview"
+        },
+        {
+          "condition": "task.latency === 'fast'",
+          "model": "gemini-2.5-flash"
+        },
+        {
+          "condition": "task.type === 'research' && task.depth === 'comprehensive'",
+          "model": "deep-research-pro-preview-12-2025"
+        },
+        {
+          "condition": "default",
+          "model": "gemini-3-flash-preview"
+        }
+      ]
+    },
+    "knowledgeOperations": {
+      "documentAnalysis": {
+        "description": "Use Gemini for large document analysis",
+        "recommendedModel": "gemini-3-pro-preview",
+        "config": {
+          "thinkingLevel": "high",
+          "outputFormat": "json"
+        }
+      },
+      "groundedQuery": {
+        "description": "Combine repository knowledge with real-time search",
+        "recommendedModel": "gemini-3-flash-preview",
+        "config": {
+          "tools": ["google_search"],
+          "thinkingLevel": "high"
+        }
+      },
+      "visualKnowledge": {
+        "description": "Generate visual representations of knowledge",
+        "recommendedModel": "gemini-3-pro-image-preview",
+        "config": {
+          "imageConfig": {
+            "aspectRatio": "16:9",
+            "imageSize": "2K"
+          }
+        }
+      },
+      "deepResearch": {
+        "description": "Comprehensive research with autonomous planning",
+        "recommendedModel": "deep-research-pro-preview-12-2025",
+        "config": {
+          "background": true,
+          "thinking_summaries": "auto"
+        }
+      }
+    }
+  },
+
+  "thinkingConfig": {
+    "description": "Control reasoning depth - Gemini 3 uses thinking_level, Gemini 2.5 uses thinking_budget",
+    "important": "Cannot mix thinking_level and thinking_budget in the same request - will return 400 error",
+    "gemini3": {
+      "parameter": "thinking_level",
+      "description": "Qualitative levels that control maximum reasoning depth",
+      "default": "high",
+      "levels": {
+        "minimal": {
+          "description": "Near-zero thinking, fastest responses. May still think minimally for complex coding.",
+          "supportedModels": ["gemini-3-flash-preview"],
+          "note": "Thought signatures still required even at minimal level",
+          "bestFor": ["simple queries", "chat", "high-throughput"]
+        },
+        "low": {
+          "description": "Minimizes latency and cost",
+          "supportedModels": ["gemini-3-pro-preview", "gemini-3-flash-preview"],
+          "bestFor": ["simple instruction following", "chat", "high-throughput applications"]
+        },
+        "medium": {
+          "description": "Balanced thinking for most tasks",
+          "supportedModels": ["gemini-3-flash-preview"],
+          "bestFor": ["general analysis", "moderate complexity"]
+        },
+        "high": {
+          "description": "Maximum reasoning depth (default). Model may take longer for first token.",
+          "supportedModels": ["gemini-3-pro-preview", "gemini-3-flash-preview"],
+          "bestFor": ["complex analysis", "coding", "STEM problems", "agentic tasks"]
+        }
+      }
+    },
+    "gemini25": {
+      "parameter": "thinking_budget",
+      "description": "Token count that controls reasoning depth numerically",
+      "guidelines": {
+        "0-1000": { "description": "Simple tasks, minimal reasoning", "latency": "minimal" },
+        "1000-4000": { "description": "Standard reasoning tasks", "latency": "low" },
+        "4000-8000": { "description": "Complex analysis", "latency": "moderate" },
+        "8000-16000": { "description": "Deep reasoning, multi-step problems", "latency": "higher" },
+        "16000+": { "description": "Maximum reasoning depth", "latency": "significant" }
+      },
+      "supportedModels": ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    }
+  },
+
+  "tools": {
+    "googleSearch": {
+      "description": "Ground responses in real-time web content",
+      "usage": { "google_search": {} },
+      "billing": "Per search query executed",
+      "supportedModels": ["gemini-3-*", "gemini-2.5-*"]
+    },
+    "urlContext": {
+      "description": "Analyze specific URLs provided in the prompt",
+      "usage": { "url_context": {} },
+      "supportedModels": ["gemini-3-pro-preview", "gemini-3-flash-preview"]
+    },
+    "codeExecution": {
+      "description": "Execute code in a secure sandbox",
+      "usage": { "code_execution": {} },
+      "supportedModels": ["gemini-3-pro-preview", "gemini-3-flash-preview", "gemini-2.5-*"]
+    },
+    "fileSearch": {
+      "description": "Search through uploaded files",
+      "usage": { "type": "file_search", "file_search_store_names": ["..."] },
+      "supportedModels": ["gemini-3-*", "gemini-2.5-*"]
+    }
+  },
+
+  "rateLimits": {
+    "description": "API rate limits vary by tier and model",
+    "tiers": {
+      "free": {
+        "requestsPerMinute": 10,
+        "tokensPerMinute": 100000,
+        "requestsPerDay": 1500
+      },
+      "payAsYouGo": {
+        "requestsPerMinute": 1000,
+        "tokensPerMinute": 4000000,
+        "requestsPerDay": "unlimited"
+      },
+      "enterprise": {
+        "requestsPerMinute": "custom",
+        "tokensPerMinute": "custom",
+        "requestsPerDay": "unlimited",
+        "note": "Contact Google for enterprise limits"
+      }
+    },
+    "modelSpecific": {
+      "deepResearch": {
+        "concurrentJobs": 5,
+        "maxDuration": "60 minutes",
+        "note": "Deep Research has separate rate limits"
+      },
+      "liveApi": {
+        "concurrentSessions": 10,
+        "maxSessionDuration": "unlimited with proper keep-alive",
+        "note": "Live API uses WebSocket connections"
+      }
+    }
+  },
+
+  "bestPractices": [
+    "Keep temperature at 1.0 for Gemini 3 models to avoid looping issues",
+    "Use thinking_level instead of thinking_budget for Gemini 3",
+    "Preserve and return thought signatures in multi-turn conversations",
+    "Use structured outputs (JSON schema) for predictable responses",
+    "Leverage context caching for repeated large prompts",
+    "Use Flash for high-volume tasks, Pro for complex reasoning",
+    "Enable search grounding for current events and real-time data"
+  ],
+
+  "recommended_stack": {
+    "development": {
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "low",
+      "notes": "Fast iteration, lower cost"
+    },
+    "production": {
+      "default": "gemini-3-flash-preview",
+      "complex_tasks": "gemini-3-pro-preview",
+      "image_generation": "gemini-3-pro-image-preview",
+      "research": "deep-research-pro-preview-12-2025",
+      "notes": "Route based on task requirements"
+    }
+  }
+}
