@@ -196,22 +196,25 @@ a2i2-beta-v1/
 
 ### 2.2 Install Dependencies
 
+> **Note**: `create-next-app` installs core dependencies (next, react, react-dom, typescript, tailwindcss).
+> The packages below are **additional** dependencies for the A2I2 integration.
+
 ```bash
+# Database driver (required)
 npm install @neondatabase/serverless
-npm install -D @types/node
 
-# Required for security
-npm install zod                   # Input validation
+# Input validation (required)
+npm install zod
 
-# Authentication (choose one)
+# Authentication (choose one - required for production)
 npm install @clerk/nextjs         # Clerk (recommended for quick setup)
 # OR
 npm install next-auth             # NextAuth.js (more flexible)
 
-# Optional
+# Optional integrations
 npm install ai                    # Vercel AI SDK (if adding chat)
 npm install @anthropic-ai/sdk     # Claude integration
-npm install d3                    # Graph visualization
+npm install d3 @types/d3          # Graph visualization
 ```
 
 ### 2.3 Database Client Setup
@@ -221,22 +224,20 @@ npm install d3                    # Graph visualization
 ```typescript
 import { neon } from '@neondatabase/serverless';
 
-// Serverless-optimized connection
-export const sql = neon(process.env.DATABASE_URL!);
-
-// For complex queries with transactions
-import { Pool } from '@neondatabase/serverless';
-
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-
-// Helper for common operations
-export async function query<T>(
-  text: string,
-  params?: unknown[]
-): Promise<T[]> {
-  const result = await sql(text, params);
-  return result as T[];
+// Validate environment variable at startup
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL environment variable is required');
 }
+
+// Serverless-optimized connection using tagged templates
+// This is the idiomatic pattern for @neondatabase/serverless
+export const sql = neon(process.env.DATABASE_URL);
+
+// Usage example:
+// const users = await sql`SELECT * FROM users WHERE id = ${userId}`;
+//
+// The neon() driver uses tagged template literals for parameterized queries.
+// Values are automatically escaped and safe from SQL injection.
 ```
 
 ### 2.4 Knowledge Operations Port
@@ -257,10 +258,11 @@ import { sql } from './db';
 type MemoryType = 'episodic' | 'semantic' | 'procedural';
 
 // Whitelist of allowed columns per memory type to prevent injection
+// Column names must match the actual database schema (supabase-schema.sql)
 const ALLOWED_COLUMNS: Record<MemoryType, readonly string[]> = {
   episodic: ['event_type', 'summary', 'detailed_content', 'participants', 'tags', 'outcome', 'confidence', 'importance'],
-  semantic: ['category', 'name', 'definition', 'source_references', 'tags', 'confidence'],
-  procedural: ['procedure_type', 'procedure_name', 'description', 'steps', 'tags', 'confidence']
+  semantic: ['category', 'statement', 'explanation', 'evidence', 'domain', 'tags', 'confidence'],
+  procedural: ['procedure_type', 'name', 'description', 'steps', 'tags', 'confidence']
 } as const;
 
 export class KnowledgeRepository {
@@ -302,12 +304,13 @@ export class KnowledgeRepository {
     } else if (memoryType === 'semantic') {
       result = await sql`
         INSERT INTO arcus_semantic_memory
-          (category, name, definition, source_references, tags, confidence)
+          (category, statement, explanation, evidence, domain, tags, confidence)
         VALUES (
           ${sanitizedEntry.category ?? null},
-          ${sanitizedEntry.name ?? null},
-          ${sanitizedEntry.definition ?? null},
-          ${JSON.stringify(sanitizedEntry.source_references ?? [])},
+          ${sanitizedEntry.statement ?? null},
+          ${sanitizedEntry.explanation ?? null},
+          ${sanitizedEntry.evidence ?? []},
+          ${sanitizedEntry.domain ?? null},
           ${sanitizedEntry.tags ?? []},
           ${sanitizedEntry.confidence ?? 0.5}
         )
@@ -316,12 +319,12 @@ export class KnowledgeRepository {
     } else {
       result = await sql`
         INSERT INTO arcus_procedural_memory
-          (procedure_type, procedure_name, description, steps, tags, confidence)
+          (procedure_type, name, description, steps, tags, confidence)
         VALUES (
           ${sanitizedEntry.procedure_type ?? null},
-          ${sanitizedEntry.procedure_name ?? null},
+          ${sanitizedEntry.name ?? null},
           ${sanitizedEntry.description ?? null},
-          ${sanitizedEntry.steps ?? []},
+          ${JSON.stringify(sanitizedEntry.steps ?? [])},
           ${sanitizedEntry.tags ?? []},
           ${sanitizedEntry.confidence ?? 0.5}
         )
@@ -356,6 +359,9 @@ export class KnowledgeRepository {
     const safeDaysBack = Math.min(Math.max(1, Math.floor(daysBack)), 365);
     const safeConfidence = Math.min(Math.max(0, minConfidence), 1);
 
+    // Escape LIKE special characters to prevent wildcard injection
+    const escapedQuery = searchQuery.replace(/[\\%_]/g, '\\$&');
+
     const results: Record<string, unknown>[] = [];
 
     // Use explicit queries per table to prevent SQL injection
@@ -363,10 +369,10 @@ export class KnowledgeRepository {
       let rows: Record<string, unknown>[] = [];
 
       if (type === 'episodic') {
-        rows = searchQuery
+        rows = escapedQuery
           ? await sql`
               SELECT * FROM arcus_episodic_memory
-              WHERE summary ILIKE ${'%' + searchQuery + '%'}
+              WHERE summary ILIKE ${'%' + escapedQuery + '%'} ESCAPE '\\'
               AND confidence >= ${safeConfidence}
               AND created_at >= NOW() - (${safeDaysBack} * INTERVAL '1 day')
               ORDER BY created_at DESC
@@ -380,10 +386,11 @@ export class KnowledgeRepository {
               LIMIT ${safeLimit}
             `;
       } else if (type === 'semantic') {
-        rows = searchQuery
+        // Search by 'statement' column (matches schema)
+        rows = escapedQuery
           ? await sql`
               SELECT * FROM arcus_semantic_memory
-              WHERE name ILIKE ${'%' + searchQuery + '%'}
+              WHERE statement ILIKE ${'%' + escapedQuery + '%'} ESCAPE '\\'
               AND confidence >= ${safeConfidence}
               AND created_at >= NOW() - (${safeDaysBack} * INTERVAL '1 day')
               ORDER BY created_at DESC
@@ -397,10 +404,11 @@ export class KnowledgeRepository {
               LIMIT ${safeLimit}
             `;
       } else if (type === 'procedural') {
-        rows = searchQuery
+        // Search by 'name' column (matches schema - not 'procedure_name')
+        rows = escapedQuery
           ? await sql`
               SELECT * FROM arcus_procedural_memory
-              WHERE procedure_name ILIKE ${'%' + searchQuery + '%'}
+              WHERE name ILIKE ${'%' + escapedQuery + '%'} ESCAPE '\\'
               AND confidence >= ${safeConfidence}
               AND created_at >= NOW() - (${safeDaysBack} * INTERVAL '1 day')
               ORDER BY created_at DESC
@@ -609,6 +617,92 @@ export async function GET() {
 }
 ```
 
+**`src/app/api/relate/route.ts`:**
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { knowledge } from '@/lib/knowledge';
+import { z, ZodError } from 'zod';
+
+const RelateSchema = z.object({
+  sourceName: z.string().min(1),
+  sourceType: z.string().min(1),
+  relationship: z.string().min(1),
+  targetName: z.string().min(1),
+  targetType: z.string().min(1),
+  properties: z.record(z.unknown()).optional()
+});
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { sourceName, sourceType, relationship, targetName, targetType, properties } =
+      RelateSchema.parse(body);
+
+    const result = await knowledge.relate(
+      sourceName,
+      sourceType,
+      relationship,
+      targetName,
+      targetType,
+      properties
+    );
+
+    return NextResponse.json(result, { status: 201 });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: error.errors },
+        { status: 400 }
+      );
+    }
+
+    console.error('Relate error:', error instanceof Error ? error.message : 'Unknown error');
+    return NextResponse.json(
+      { error: 'Failed to create relationship' },
+      { status: 500 }
+    );
+  }
+}
+```
+
+**`src/app/api/reflect/route.ts`:**
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { knowledge } from '@/lib/knowledge';
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+
+    const days = parseInt(searchParams.get('days') || '7', 10);
+    const minEvidence = parseInt(searchParams.get('minEvidence') || '3', 10);
+
+    // Validate parameters
+    if (isNaN(days) || days < 1 || days > 90) {
+      return NextResponse.json(
+        { error: 'days must be between 1 and 90' },
+        { status: 400 }
+      );
+    }
+
+    const result = await knowledge.reflect({
+      days,
+      minEvidence: isNaN(minEvidence) ? 3 : minEvidence
+    });
+
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error('Reflect error:', error instanceof Error ? error.message : 'Unknown error');
+    return NextResponse.json(
+      { error: 'Failed to generate reflection' },
+      { status: 500 }
+    );
+  }
+}
+```
+
 ### 2.6 Authentication Middleware (Required for Production)
 
 > **CRITICAL**: Never deploy API routes without authentication.
@@ -653,15 +747,26 @@ export const config = {
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
+
+// Timing-safe comparison to prevent timing attacks
+function secureCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    // Compare against itself to maintain constant time even on length mismatch
+    crypto.timingSafeEqual(Buffer.from(a), Buffer.from(a));
+    return false;
+  }
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 export function withAuth(
   handler: (req: NextRequest) => Promise<NextResponse>
 ) {
   return async (req: NextRequest) => {
-    const apiKey = req.headers.get('x-api-key');
-    const validApiKey = process.env.API_SECRET_KEY;
+    const apiKey = req.headers.get('x-api-key') || '';
+    const validApiKey = process.env.API_SECRET_KEY || '';
 
-    if (!apiKey || apiKey !== validApiKey) {
+    if (!apiKey || !validApiKey || !secureCompare(apiKey, validApiKey)) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

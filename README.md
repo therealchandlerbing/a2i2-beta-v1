@@ -1168,9 +1168,12 @@ Use natural language—no special commands needed:
 | "Sarah works at TechCorp as CIO" | Creates relationship in knowledge graph |
 | "Create a proposal for DataFlow" | Triggers proposal workflow with context |
 
-### Adding Persistent Storage (15 minutes)
+### Adding Persistent Storage (45-60 minutes)
 
 For cross-session memory that survives beyond `CLAUDE.memory.md`:
+
+> **Note**: These options involve creating a new Next.js application with API routes.
+> The time estimate assumes familiarity with Next.js and PostgreSQL.
 
 <details>
 <summary><b>Option A: Vercel + Neon (Recommended)</b></summary>
@@ -1209,8 +1212,10 @@ Deploy A2I2 as a web application with serverless PostgreSQL:
 **Benefits:**
 - Serverless scaling (pay for what you use)
 - Database branching for dev/staging/prod
-- Web dashboard for memory visualization
-- API endpoints for external integrations
+- Web dashboard templates (build your own UI with provided examples)
+- REST API endpoints for external integrations
+
+> **Security Note**: API endpoints require authentication before production deployment.
 
 See **[VERCEL-NEON-INTEGRATION.md](docs/VERCEL-NEON-INTEGRATION.md)** for complete setup guide.
 
