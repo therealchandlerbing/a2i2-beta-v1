@@ -932,6 +932,195 @@ Unlike standalone voice assistants, A2I2's voice layer is connected to the full 
 
 <br/>
 
+## 🤖 Google Gemini Multi-Model Integration
+
+A2I2 leverages **Google Gemini** models to supercharge capabilities with state-of-the-art multimodal understanding, image generation, and real-time grounded search.
+
+### Why Gemini + Claude Together?
+
+| Capability | Claude | Gemini 3 Pro | Combined Power |
+|:-----------|:------:|:------------:|:---------------|
+| Long-form reasoning | Excellent | Excellent | Best model for task |
+| Multimodal (vision) | Good | **Excellent** | Gemini for complex vision |
+| Image generation | No | **Yes** | Gemini generates visuals |
+| Context window | 200K | **1M tokens** | Gemini for massive docs |
+| Real-time grounding | No | **Yes** | Gemini for current info |
+| Code execution | No | **Yes** | Gemini runs code safely |
+| Natural conversation | Excellent | Good | Claude for empathy |
+
+### Gemini Model Family
+
+<table>
+<tr>
+<th>Model</th>
+<th>Best For</th>
+<th>Key Features</th>
+</tr>
+<tr>
+<td><b>Gemini 3 Pro</b></td>
+<td>Complex reasoning, agentic tasks</td>
+<td>1M context, dynamic thinking, most intelligent</td>
+</tr>
+<tr>
+<td><b>Gemini 3 Flash</b></td>
+<td>Balanced speed/quality</td>
+<td>Pro-level intelligence at Flash speed</td>
+</tr>
+<tr>
+<td><b>Gemini 3 Pro Image</b></td>
+<td>Image generation</td>
+<td>4K output, grounded generation, editing</td>
+</tr>
+<tr>
+<td><b>Deep Research Agent</b></td>
+<td>Comprehensive research</td>
+<td>Autonomous multi-step analysis</td>
+</tr>
+<tr>
+<td><b>Gemini 2.5 Flash</b></td>
+<td>High-volume processing</td>
+<td>Best price-performance ratio</td>
+</tr>
+<tr>
+<td><b>Gemini Live API</b></td>
+<td>Real-time voice/video</td>
+<td>Full-duplex audio, thinking support</td>
+</tr>
+</table>
+
+### Multi-Model Intelligence Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    A2I2 MULTI-MODEL INTELLIGENCE                                 │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   USER REQUEST                                                                   │
+│        │                                                                         │
+│        ▼                                                                         │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │                      MODEL ROUTER                                        │   │
+│   │                                                                          │   │
+│   │   Analyze task → Select optimal model → Route request                   │   │
+│   │                                                                          │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│        │                    │                    │                               │
+│        ▼                    ▼                    ▼                               │
+│   ┌──────────┐        ┌──────────┐        ┌──────────┐                         │
+│   │  CLAUDE  │        │  GEMINI  │        │ PERSONA  │                         │
+│   │          │        │          │        │  PLEX    │                         │
+│   │ • Nuanced│        │ • 1M ctx │        │ • Voice  │                         │
+│   │   convo  │        │ • Vision │        │ • 170ms  │                         │
+│   │ • Complex│        │ • Search │        │ • Full   │                         │
+│   │   writing│        │ • Images │        │   duplex │                         │
+│   └──────────┘        └──────────┘        └──────────┘                         │
+│        │                    │                    │                               │
+│        └────────────────────┴────────────────────┘                               │
+│                             │                                                    │
+│                             ▼                                                    │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │                    KNOWLEDGE REPOSITORY                                  │   │
+│   │   Episodic │ Semantic │ Procedural │ Relational                         │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Gemini Capabilities for A2I2
+
+<table>
+<tr>
+<td width="50%">
+
+**Search Grounding**
+
+Get real-time information from Google Search:
+- Current events and news
+- Up-to-date pricing and data
+- Verified facts with citations
+
+**Thinking Levels**
+
+Control reasoning depth:
+- `minimal`: Ultra-fast responses (Flash only)
+- `low`: Simple tasks
+- `medium`: Balanced reasoning (Flash only)
+- `high`: Deep analysis (default)
+
+</td>
+<td width="50%">
+
+**Deep Research Agent**
+
+Autonomous research that:
+- Plans investigation steps
+- Searches and reads sources
+- Synthesizes detailed reports
+- Takes 5-20 minutes for complex tasks
+
+**Image Generation**
+
+Create visuals with Gemini 3 Pro Image:
+- Architecture diagrams
+- Infographics
+- 4K resolution support
+- Grounded in real data
+
+</td>
+</tr>
+</table>
+
+### Model Selection Guide
+
+| Task Type | Model | Why |
+|:----------|:------|:----|
+| Complex reasoning | Claude or Gemini 3 Pro | Both excel |
+| Large documents (>200K) | Gemini 3 Pro | 1M context |
+| Image generation | Gemini 3 Pro Image | Only option |
+| Real-time info | Gemini 3 Flash + Search | Grounded |
+| Video/audio analysis | Gemini 3 Pro | Native multimodal |
+| High-volume tasks | Gemini 2.5 Flash | Best value |
+| Natural conversation | Claude | More empathetic |
+| Autonomous research | Deep Research Agent | Multi-step |
+
+### Quick Start with Gemini
+
+```bash
+# Set your API key
+export GEMINI_API_KEY="your-api-key"
+
+# Install the SDK (google-genai is Google's unified GenAI SDK, released 2024)
+# Note: This is different from the older google-generativeai package
+pip install google-genai
+```
+
+```python
+from google import genai
+from google.genai import types
+
+# Initialize client (uses GEMINI_API_KEY environment variable)
+client = genai.Client()
+
+# Use Gemini with search grounding
+response = client.models.generate_content(
+    model="gemini-3-flash-preview",
+    contents="What are the latest developments in AI?",
+    config=types.GenerateContentConfig(
+        tools=[{"google_search": {}}]
+    )
+)
+
+print(response.text)
+```
+
+See [GEMINI-INTEGRATION.md](.claude/skills/knowledge-repository/docs/GEMINI-INTEGRATION.md) for the complete integration guide.
+
+<br/>
+
+---
+
+<br/>
+
 ## 🔧 Tool Orchestration & Workflow Engine
 
 A2I2 doesn't just remember—it **acts**. The platform orchestrates tools, skills, and integrations to automate complex workflows while learning from every execution.
@@ -1320,9 +1509,11 @@ a2i2-beta-v1/
 │           ├── 📄 INDEX.md                   # Navigation guide
 │           │
 │           ├── 📂 docs/                      # Extended documentation
+│           │   ├── 📄 INDEX.md               # Documentation navigation
 │           │   ├── 📄 VISION.md              # R2-D2 / Enterprise vision
 │           │   ├── 📄 ARCHITECTURE.md        # Technical architecture
 │           │   ├── 📄 STRATEGIC-REVIEW.md    # Novel concepts & IP
+│           │   ├── 📄 GEMINI-INTEGRATION.md  # Gemini multi-model guide
 │           │   ├── 📄 PERSONAPLEX-INTEGRATION.md  # Voice integration
 │           │   ├── 📄 PRACTICAL-IMPLEMENTATION.md
 │           │   └── 📄 COMPANION-ENHANCEMENTS.md
@@ -1333,7 +1524,8 @@ a2i2-beta-v1/
 │           ├── 📂 config/
 │           │   ├── 📄 memory-template.md     # Session memory template
 │           │   ├── 📄 hooks-config.json      # Hooks configuration
-│           │   └── 📄 mcp-voice-config.json  # Voice configuration
+│           │   ├── 📄 mcp-voice-config.json  # Voice configuration
+│           │   └── 📄 gemini-config.json     # Gemini model configuration
 │           │
 │           └── 📂 src/
 │               ├── 📄 knowledge_operations.py  # Python implementation
@@ -1370,10 +1562,12 @@ a2i2-beta-v1/
 |:---------|:------------|:---------|
 | [**SKILL.md**](.claude/skills/knowledge-repository/SKILL.md) | Core operational logic | Developers |
 | [**QUICK-START.md**](.claude/skills/knowledge-repository/QUICK-START.md) | Fast reference guide | Everyone |
+| [**INDEX.md**](.claude/skills/knowledge-repository/docs/INDEX.md) | Documentation navigation | Everyone |
 | [**VERCEL-NEON-INTEGRATION.md**](docs/VERCEL-NEON-INTEGRATION.md) | Vercel + Neon deployment guide | Developers |
 | [**VISION.md**](.claude/skills/knowledge-repository/docs/VISION.md) | R2-D2 / Enterprise vision | Stakeholders |
 | [**ARCHITECTURE.md**](.claude/skills/knowledge-repository/docs/ARCHITECTURE.md) | Technical architecture | Developers |
 | [**STRATEGIC-REVIEW.md**](.claude/skills/knowledge-repository/docs/STRATEGIC-REVIEW.md) | Novel concepts & IP | Leadership |
+| [**GEMINI-INTEGRATION.md**](.claude/skills/knowledge-repository/docs/GEMINI-INTEGRATION.md) | Gemini multi-model guide | Developers |
 | [**PERSONAPLEX-INTEGRATION.md**](.claude/skills/knowledge-repository/docs/PERSONAPLEX-INTEGRATION.md) | Voice integration guide | Developers |
 | [**Brand Standards**](brand-standards/arcus-innovation-studios/arcus-brand-standards.md) | Complete brand guide | Designers |
 
@@ -1401,6 +1595,7 @@ a2i2-beta-v1/
 - [x] PersonaPlex voice integration
 - [x] Autonomy progression model
 - [x] Dedicated repository
+- [x] Gemini multi-model integration
 - [ ] Digital Twin v1.0
 - [ ] CAP specification v1.0
 
@@ -1458,7 +1653,9 @@ Vision        ░░░░░░░░░░░░░░░░░░░░░░
 
 | Layer | Technology | Rationale |
 |:------|:-----------|:----------|
-| **LLM** | Claude (Anthropic) | Extended thinking, tool use |
+| **LLM (Primary)** | Claude (Anthropic) | Extended thinking, nuanced conversation |
+| **LLM (Multimodal)** | Gemini 3 Pro/Flash | 1M context, vision, image gen, grounded search |
+| **Research Agent** | Gemini Deep Research | Autonomous multi-step research |
 | **Hosting** | Vercel | Serverless, edge network, instant deploys |
 | **Database** | Neon or Supabase (PostgreSQL) | Serverless Postgres, branching, pgvector |
 | **Vector Store** | pgvector | Semantic search, native Postgres |

@@ -1271,16 +1271,59 @@ CREATE TRIGGER update_entities_modtime
 
 | Layer | Technology | Rationale |
 |-------|------------|-----------|
-| **LLM** | Claude (Anthropic) | Already integrated, extended thinking |
-| **Database** | Supabase (PostgreSQL) | Already integrated, real-time, vectors |
-| **Vector Store** | pgvector (via Supabase) | No additional infra needed |
+| **LLM (Primary)** | Claude (Anthropic) | Extended thinking, nuanced conversation |
+| **LLM (Multimodal)** | Gemini 3 Pro/Flash | 1M context, vision, image gen, grounded search |
+| **LLM (Research)** | Gemini Deep Research | Autonomous multi-step research agent |
+| **LLM (Image Gen)** | Gemini 3 Pro Image | 4K image generation, grounded visuals |
+| **Database** | Neon/Supabase (PostgreSQL) | Serverless Postgres, real-time, vectors |
+| **Vector Store** | pgvector | No additional infra needed |
 | **File Storage** | Git + Google Drive | Version control + collaboration |
-| **Voice STT** | Deepgram | Low latency, real-time streaming |
-| **Voice TTS** | ElevenLabs | Natural voices, voice cloning |
+| **Voice (Full-Duplex)** | NVIDIA PersonaPlex | 170ms latency, full-duplex, open source |
+| **Voice (Live API)** | Gemini Live API | Real-time voice with thinking support |
+| **Voice STT** | Deepgram | Low latency, real-time streaming (alt) |
+| **Voice TTS** | ElevenLabs | Natural voices, voice cloning (alt) |
 | **Real-time Transport** | WebRTC + WebSockets | Low latency voice + state sync |
 | **Framework** | Next.js 14 | Already using for dashboard |
+| **Hosting** | Vercel | Serverless, edge network |
 | **Automation** | Zapier + Hooks | Already integrated |
 | **Meeting Integration** | Zoom SDK | Widest enterprise adoption |
+
+### Multi-Model Intelligence Architecture
+
+A2I2 uses a model router to select the optimal AI model for each task:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    MODEL SELECTION LOGIC                             │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│   TASK TYPE                           RECOMMENDED MODEL              │
+│   ─────────                           ─────────────────              │
+│                                                                      │
+│   Complex reasoning ─────────────────► Claude or Gemini 3 Pro       │
+│   Large documents (>200K) ───────────► Gemini 3 Pro (1M context)    │
+│   Image generation ──────────────────► Gemini 3 Pro Image           │
+│   Real-time information ─────────────► Gemini 3 Flash + Search      │
+│   Video/audio analysis ──────────────► Gemini 3 Pro                 │
+│   High-volume processing ────────────► Gemini 2.5 Flash             │
+│   Natural conversation ──────────────► Claude                       │
+│   Real-time voice ───────────────────► PersonaPlex or Gemini Live   │
+│   Autonomous research ───────────────► Gemini Deep Research         │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Gemini Model Capabilities
+
+| Model | Context | Key Capabilities | Best For |
+|-------|---------|------------------|----------|
+| **Gemini 3 Pro** | 1M/64K | Thinking, tools, search grounding | Complex analysis |
+| **Gemini 3 Flash** | 1M/64K | Pro-level at Flash speed | Balanced tasks |
+| **Gemini 3 Pro Image** | 65K/32K | 4K image generation | Visual content |
+| **Gemini 2.5 Pro** | 1M/64K | Advanced thinking | STEM, code |
+| **Gemini 2.5 Flash** | 1M/64K | Best price-performance | High volume |
+| **Gemini Live API** | 131K/8K | Real-time audio, thinking | Voice interface |
+| **Deep Research** | N/A | Autonomous research agent | Reports, analysis |
 
 ### Infrastructure Requirements
 

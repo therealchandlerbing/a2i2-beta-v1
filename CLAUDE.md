@@ -4,7 +4,7 @@
 **Purpose**: Enterprise AI Chief of Staff - Building AI companions that remember, learn, and grow with organizations
 **Organization**: Arcus Innovation Studios
 **Version**: 1.0.0-beta
-**Last Updated**: 2026-01-24
+**Last Updated**: 2026-01-25
 
 ---
 
@@ -32,6 +32,7 @@ a2i2-beta-v1/
 │   │   ├── VISION.md                      # R2-D2 vision
 │   │   ├── ARCHITECTURE.md                # Technical architecture
 │   │   ├── STRATEGIC-REVIEW.md            # Novel concepts
+│   │   ├── GEMINI-INTEGRATION.md          # Gemini multi-model guide
 │   │   └── PERSONAPLEX-INTEGRATION.md     # Voice integration
 │   ├── schemas/supabase-schema.sql        # Database schema
 │   ├── config/                            # Configuration files
@@ -102,6 +103,8 @@ A2I2 introduces genuinely novel concepts:
 | 2 | `CLAUDE.memory.md` | Current session state and preferences |
 | 3 | `.claude/skills/knowledge-repository/QUICK-START.md` | Fast reference |
 | 4 | `.claude/skills/knowledge-repository/docs/ARCHITECTURE.md` | System design |
+| 5 | `.claude/skills/knowledge-repository/docs/GEMINI-INTEGRATION.md` | Gemini multi-model guide |
+| 6 | `.claude/skills/knowledge-repository/docs/INDEX.md` | Documentation navigation |
 
 ---
 
@@ -146,6 +149,27 @@ NVIDIA PersonaPlex for natural conversation:
 - 170ms latency for responses
 - Full-duplex conversation
 - See `docs/PERSONAPLEX-INTEGRATION.md`
+
+### Gemini Multi-Model Integration
+Google Gemini models for advanced capabilities:
+- **Gemini 3 Pro**: 1M context, complex reasoning, agentic tasks
+- **Gemini 3 Flash**: Pro-level intelligence at Flash speed
+- **Gemini 3 Pro Image**: 4K image generation, grounded visuals
+- **Deep Research Agent**: Autonomous multi-step research
+- **Search Grounding**: Real-time information from Google Search
+- **Thinking Levels**: Control reasoning depth (minimal, low, medium, high)
+- See `docs/GEMINI-INTEGRATION.md`
+
+### Model Selection
+A2I2 uses a model router to select optimal AI for each task:
+| Task | Recommended Model |
+|------|-------------------|
+| Complex reasoning | Claude or Gemini 3 Pro |
+| Large documents (>200K) | Gemini 3 Pro |
+| Image generation | Gemini 3 Pro Image |
+| Real-time information | Gemini 3 Flash + Search |
+| Natural conversation | Claude |
+| Autonomous research | Deep Research Agent |
 
 ---
 
