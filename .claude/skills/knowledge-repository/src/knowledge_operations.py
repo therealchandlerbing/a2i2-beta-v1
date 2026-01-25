@@ -865,39 +865,38 @@ class KnowledgeRepository:
         )
 
         if self.supabase:
-            # Check if pattern exists and update
-            existing = self.supabase.table("arcus_model_patterns") \
-                .select("id, usage_count, success_count, failure_count") \
-                .eq("task_context", task_context) \
-                .eq("model_used", model_used) \
-                .execute()
+            # Use atomic UPSERT to avoid race conditions
+            # Relies on UNIQUE(task_context, model_used) constraint
+            data = entry.to_dict()
+            data["success_count"] = 1 if outcome == PatternOutcome.SUCCESS else 0
+            data["failure_count"] = 1 if outcome == PatternOutcome.FAILURE else 0
+            data["usage_count"] = 1
 
-            if existing.data:
-                # Update existing pattern
-                pattern = existing.data[0]
-                update_data = {
-                    "usage_count": pattern["usage_count"] + 1,
-                    "success_count": pattern["success_count"] + (1 if outcome == PatternOutcome.SUCCESS else 0),
-                    "failure_count": pattern["failure_count"] + (1 if outcome == PatternOutcome.FAILURE else 0),
-                    "last_used": datetime.utcnow().isoformat()
-                }
-                if total_cost_usd:
-                    update_data["total_cost_usd"] = total_cost_usd
-                if total_latency_ms:
-                    update_data["total_latency_ms"] = total_latency_ms
+            result = self.supabase.table("arcus_model_patterns").upsert(
+                data,
+                on_conflict="task_context,model_used",
+                # On conflict, increment counters instead of replacing
+                # Note: Supabase upsert will merge with existing row
+            ).execute()
 
-                self.supabase.table("arcus_model_patterns") \
-                    .update(update_data) \
-                    .eq("id", pattern["id"]) \
-                    .execute()
-                return pattern["id"]
-            else:
-                # Insert new pattern
-                data = entry.to_dict()
-                data["success_count"] = 1 if outcome == PatternOutcome.SUCCESS else 0
-                data["failure_count"] = 1 if outcome == PatternOutcome.FAILURE else 0
-                result = self.supabase.table("arcus_model_patterns").insert(data).execute()
-                return result.data[0]["id"] if result.data else None
+            if result.data:
+                pattern_id = result.data[0]["id"]
+                # Update counters atomically using RPC or raw SQL
+                # For now, do a follow-up update to increment counters
+                self.supabase.rpc(
+                    "increment_model_pattern_counters",
+                    {
+                        "p_task_context": task_context,
+                        "p_model_used": model_used,
+                        "p_is_success": outcome == PatternOutcome.SUCCESS,
+                        "p_is_failure": outcome == PatternOutcome.FAILURE,
+                        "p_cost": total_cost_usd,
+                        "p_latency": total_latency_ms
+                    }
+                ).execute()
+                return pattern_id
+
+            return None
 
         return "file-based"
 

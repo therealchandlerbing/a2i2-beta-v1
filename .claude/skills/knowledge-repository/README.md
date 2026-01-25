@@ -277,28 +277,28 @@ Periodic synthesis:
 
 ```
 .claude/skills/knowledge-repository/
-├── SKILL.md                 # Claude's operational instructions
-├── README.md                # This file
-├── QUICK-START.md           # Fast reference guide
-├── INDEX.md                 # Navigation guide
+├── SKILL.md                    # Claude's operational instructions
+├── README.md                   # This file
+├── QUICK-START.md              # Fast reference guide
+├── INDEX.md                    # Navigation guide
 │
 ├── docs/
-│   ├── ARCHITECTURE.md      # Complete technical architecture
-│   ├── VISION.md            # Long-term vision document
-│   └── TOOLORCHESTRA-REVIEW.md  # ToolOrchestra analysis & enhancements
+│   ├── ARCHITECTURE.md         # Complete technical architecture
+│   ├── VISION.md               # Long-term vision document
+│   └── TOOLORCHESTRA-REVIEW.md # ToolOrchestra analysis & enhancements
 │
 ├── schemas/
-│   └── supabase-schema.sql  # Database schema (incl. orchestration tables)
+│   └── supabase-schema.sql     # Database schema (incl. orchestration tables)
 │
 ├── src/
-│   ├── types.ts             # TypeScript type definitions
-│   ├── knowledge_operations.py  # Core Python operations
-│   └── model_router.py      # Intelligent model routing (NEW)
+│   ├── types.ts                # TypeScript type definitions
+│   ├── knowledge_operations.py # Core Python operations
+│   └── model_router.py         # Intelligent model routing (NEW)
 │
 ├── config/
-│   └── memory-template.md   # Template for CLAUDE.memory.md
+│   └── memory-template.md      # Template for CLAUDE.memory.md
 │
-└── modules/                 # Future: modular extensions
+└── modules/                    # Future: modular extensions
     ├── client-intelligence/
     ├── project-memory/
     └── team-preferences/

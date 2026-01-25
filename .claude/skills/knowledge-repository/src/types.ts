@@ -730,13 +730,13 @@ export interface UserPreferenceVectorInput {
 
 export interface OrchestrationDecision {
   selected_model: string;
-  selected_tools: string[];
-  thinking_level: 'minimal' | 'low' | 'medium' | 'high';
+  thinking_level: 'minimal' | 'low' | 'medium' | 'high' | null;
   reasoning: string;
   estimated_cost: number;
   estimated_latency_ms: number;
   confidence: ConfidenceLevel;
   matched_pattern?: UUID;
+  fallback_model?: string;
 }
 
 export interface OrchestrationRequest {

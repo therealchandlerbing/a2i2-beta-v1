@@ -47,6 +47,24 @@ from knowledge_operations import (
 
 
 # =============================================================================
+# NORMALIZATION CONSTANTS
+# =============================================================================
+
+# Cost normalization thresholds (USD per 1K tokens)
+NORMALIZATION_MAX_COST = 0.1          # Upper bound for cost normalization
+NORMALIZATION_HIGH_COST_THRESHOLD = 0.01  # Threshold for "expensive" model
+
+# Latency normalization thresholds (milliseconds)
+NORMALIZATION_MAX_LATENCY = 30000     # 30 seconds upper bound
+
+# Scoring weights for selection algorithm
+WEIGHT_PREFERENCE = 0.3
+WEIGHT_PATTERN_MATCH = 0.3
+WEIGHT_CAPABILITY_MATCH = 0.2
+WEIGHT_COMPLEXITY_BONUS = 0.1
+
+
+# =============================================================================
 # MODEL CONFIGURATIONS
 # =============================================================================
 
@@ -398,10 +416,8 @@ class ModelRouter:
                     reasons.append(f"capability match")
 
             # Cost/latency score based on preferences
-            max_cost = 0.1
-            max_latency = 30000
-            cost_score = (1.0 - min(config.cost_per_1k_input / 0.01, 1.0)) * prefs.cost_weight
-            latency_score = (1.0 - min(config.avg_latency_ms / max_latency, 1.0)) * prefs.latency_weight
+            cost_score = (1.0 - min(config.cost_per_1k_input / NORMALIZATION_HIGH_COST_THRESHOLD, 1.0)) * prefs.cost_weight
+            latency_score = (1.0 - min(config.avg_latency_ms / NORMALIZATION_MAX_LATENCY, 1.0)) * prefs.latency_weight
             score += cost_score + latency_score
 
             # Complexity match

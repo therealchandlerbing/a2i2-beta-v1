@@ -47,7 +47,9 @@ R(τ) = {
   0                   otherwise
 }
 
-Where P = [p_tool1, p_tool2, ..., p_outcome, p_compute, p_latency]
+Where:
+- M_normalized = normalized efficiency mask (cost + latency penalties as values 0-1)
+- P = preference vector [p_tool1, p_tool2, ..., p_outcome, p_compute, p_latency]
 ```
 
 **Three Reward Components**:

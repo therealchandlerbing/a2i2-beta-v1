@@ -605,8 +605,35 @@ CREATE TABLE IF NOT EXISTS arcus_model_patterns (
     metadata JSONB DEFAULT '{}',
 
     -- Embedding for similarity search
-    embedding VECTOR(1536)
+    embedding VECTOR(1536),
+
+    -- UNIQUE constraint for UPSERT operations (prevents race conditions)
+    UNIQUE(task_context, model_used)
 );
+
+-- RPC function for atomic counter updates (prevents race conditions)
+CREATE OR REPLACE FUNCTION increment_model_pattern_counters(
+    p_task_context TEXT,
+    p_model_used TEXT,
+    p_is_success BOOLEAN,
+    p_is_failure BOOLEAN,
+    p_cost DECIMAL(10, 6) DEFAULT NULL,
+    p_latency INTEGER DEFAULT NULL
+)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE arcus_model_patterns
+    SET
+        usage_count = usage_count + 1,
+        success_count = success_count + CASE WHEN p_is_success THEN 1 ELSE 0 END,
+        failure_count = failure_count + CASE WHEN p_is_failure THEN 1 ELSE 0 END,
+        total_cost_usd = COALESCE(p_cost, total_cost_usd),
+        total_latency_ms = COALESCE(p_latency, total_latency_ms),
+        last_used = NOW(),
+        updated_at = NOW()
+    WHERE task_context = p_task_context AND model_used = p_model_used;
+END;
+$$ LANGUAGE plpgsql;
 
 -- Indexes for model patterns
 CREATE INDEX IF NOT EXISTS idx_pattern_context ON arcus_model_patterns(task_context);
