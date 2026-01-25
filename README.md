@@ -268,7 +268,7 @@ A2I2 implements a comprehensive five-layer memory architecture:
 </td>
 <td>How things connect</td>
 <td>Entity relationships, influence networks, connections</td>
-<td><code>arcus_knowledge_graph</code></td>
+<td><code>arcus_entities</code>, <code>arcus_relationships</code></td>
 </tr>
 </table>
 
