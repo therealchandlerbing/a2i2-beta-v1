@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "arcus-knowledge-repository-hooks",
+  "version": "1.0.0",
+  "description": "Hook configurations for automatic knowledge capture and context injection",
+
+  "hooks": {
+    "SessionStart": [
+      {
+        "name": "load-user-preferences",
+        "description": "Load preferences from CLAUDE.memory.md at session start",
+        "priority": 1,
+        "action": "read_file",
+        "target": "CLAUDE.memory.md",
+        "inject_into": "system_context"
+      },
+      {
+        "name": "load-recent-context",
+        "description": "Query recent episodic memories from Supabase",
+        "priority": 2,
+        "action": "query_supabase",
+        "query": {
+          "table": "arcus_episodic_memory",
+          "filter": "event_timestamp > now() - interval '7 days'",
+          "order": "event_timestamp DESC",
+          "limit": 20
+        },
+        "inject_into": "working_memory"
+      }
+    ],
+
+    "SessionEnd": [
+      {
+        "name": "sync-pending-learnings",
+        "description": "Batch capture any queued learnings to Supabase",
+        "priority": 1,
+        "action": "batch_insert",
+        "source": "working_memory.pending_learnings",
+        "target": "supabase"
+      },
+      {
+        "name": "update-memory-file",
+        "description": "Update CLAUDE.memory.md with session learnings",
+        "priority": 2,
+        "action": "update_file",
+        "target": "CLAUDE.memory.md",
+        "sections": ["recent_learnings", "pending_actions", "memory_operations_log"]
+      }
+    ],
+
+    "PostToolUse": [
+      {
+        "name": "capture-successful-patterns",
+        "description": "Record successful tool usage as procedural memory",
+        "priority": 1,
+        "condition": "tool_result.success == true",
+        "action": "queue_learning",
+        "learning_type": "procedural",
+        "extract": {
+          "tool_name": "tool.name",
+          "parameters": "tool.parameters",
+          "context": "session.current_task"
+        }
+      },
+      {
+        "name": "extract-entities",
+        "description": "Extract mentioned entities from tool outputs",
+        "priority": 2,
+        "action": "extract_entities",
+        "source": "tool_result.output",
+        "entity_types": ["person", "organization", "project"]
+      }
+    ],
+
+    "PreToolUse": [
+      {
+        "name": "inject-relevant-context",
+        "description": "Query knowledge relevant to the tool being used",
+        "priority": 1,
+        "action": "query_context",
+        "based_on": "tool.name",
+        "inject_into": "tool_context"
+      }
+    ],
+
+    "UserCorrection": [
+      {
+        "name": "capture-preference",
+        "description": "When user corrects Claude, capture as preference",
+        "priority": 1,
+        "action": "capture_immediate",
+        "learning_type": "procedural",
+        "procedure_type": "preference",
+        "confidence": 0.95,
+        "source_type": "user_explicit"
+      }
+    ],
+
+    "DecisionMade": [
+      {
+        "name": "capture-decision",
+        "description": "When a decision is made, record as episodic event",
+        "priority": 1,
+        "action": "capture_immediate",
+        "learning_type": "episodic",
+        "event_type": "decision",
+        "extract": {
+          "decision": "content",
+          "rationale": "reasoning",
+          "alternatives": "options_considered",
+          "participants": "session.participants"
+        }
+      }
+    ]
+  },
+
+  "triggers": {
+    "user_correction_patterns": [
+      "actually,",
+      "no, i meant",
+      "that's not right",
+      "i prefer",
+      "please don't",
+      "always use",
+      "never use"
+    ],
+    "decision_patterns": [
+      "we've decided",
+      "let's go with",
+      "the decision is",
+      "i'm choosing",
+      "we'll use"
+    ],
+    "learning_patterns": [
+      "remember that",
+      "keep in mind",
+      "note that",
+      "for future reference",
+      "fyi"
+    ]
+  },
+
+  "capture_rules": {
+    "minimum_confidence": 0.5,
+    "auto_capture_threshold": 0.7,
+    "flag_for_review_below": 0.5,
+    "never_capture": [
+      "passwords",
+      "api_keys",
+      "tokens",
+      "credentials",
+      "secrets"
+    ]
+  },
+
+  "context_injection": {
+    "max_tokens": 2000,
+    "relevance_threshold": 0.6,
+    "recency_weight": 0.3,
+    "confidence_weight": 0.4,
+    "relevance_weight": 0.3
+  }
+}

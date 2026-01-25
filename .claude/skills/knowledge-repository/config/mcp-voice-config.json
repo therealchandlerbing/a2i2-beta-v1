@@ -1,0 +1,80 @@
+{
+  "description": "Recommended MCP server configuration for Arcus Voice Companion",
+  "instructions": "Merge these entries into your .mcp.json file",
+  "mcpServers": {
+    "voicemode": {
+      "command": "uvx",
+      "args": ["voice-mcp"],
+      "env": {
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+        "VOICE_MODE": "cloud",
+        "VOICE_STT_SERVICE": "openai",
+        "VOICE_TTS_SERVICE": "openai",
+        "VOICE_TTS_VOICE": "nova"
+      },
+      "description": "Voice input/output for Claude Code - talk to Claude naturally"
+    },
+    "voicemode-local": {
+      "command": "uvx",
+      "args": ["voice-mcp"],
+      "env": {
+        "VOICE_MODE": "local",
+        "VOICE_STT_SERVICE": "whisper",
+        "VOICE_TTS_SERVICE": "kokoro",
+        "WHISPER_MODEL": "base.en"
+      },
+      "description": "Offline voice mode using Whisper.cpp and Kokoro TTS"
+    },
+    "elevenlabs": {
+      "command": "npx",
+      "args": ["-y", "@elevenlabs/mcp-server"],
+      "env": {
+        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}"
+      },
+      "description": "Professional voice synthesis with ElevenLabs"
+    }
+  },
+  "recommended_stack": {
+    "development": {
+      "use": "voicemode-local",
+      "reason": "Free, works offline, good for testing"
+    },
+    "production": {
+      "use": ["voicemode", "elevenlabs"],
+      "reason": "Better quality, lower latency, professional voices"
+    }
+  },
+  "installation": {
+    "voicemode": {
+      "prerequisites": [
+        "Python 3.10+",
+        "uv package manager (pip install uv)",
+        "OpenAI API key (for cloud mode)"
+      ],
+      "commands": [
+        "pip install uv",
+        "uvx voice-mode-install"
+      ]
+    },
+    "voicemode-local": {
+      "prerequisites": [
+        "Python 3.10+",
+        "whisper.cpp installed",
+        "kokoro-onnx installed"
+      ],
+      "commands": [
+        "pip install whisper-cpp-python kokoro-onnx",
+        "uvx voice-mode-install --local"
+      ]
+    },
+    "elevenlabs": {
+      "prerequisites": [
+        "Node.js 18+",
+        "ElevenLabs API key"
+      ],
+      "commands": [
+        "npm install -g @elevenlabs/mcp-server"
+      ]
+    }
+  }
+}
