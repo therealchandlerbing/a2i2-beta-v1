@@ -69,6 +69,26 @@ class ProcedureType(Enum):
     STANDARD = "standard"
     TEMPLATE = "template"
     DECISION_TREE = "decision_tree"
+    TOOL_PATTERN = "tool_pattern"  # NEW: For model/tool usage patterns
+
+
+class TaskComplexity(Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class PatternOutcome(Enum):
+    SUCCESS = "success"
+    PARTIAL = "partial"
+    FAILURE = "failure"
+
+
+class ThinkingLevel(Enum):
+    MINIMAL = "minimal"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 
 class SourceType(Enum):
@@ -219,6 +239,126 @@ class RelationshipEntry:
             "confidence": self.confidence,
             "source": self.source.to_dict() if self.source else {}
         }
+
+
+@dataclass
+class ToolInvocation:
+    """Record of a tool invocation within an orchestration."""
+    name: str
+    success: bool
+    latency_ms: Optional[int] = None
+    cost: Optional[float] = None
+    params_hash: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "success": self.success,
+            "latency_ms": self.latency_ms,
+            "cost": self.cost,
+            "params_hash": self.params_hash
+        }
+
+
+@dataclass
+class ModelPatternEntry:
+    """A model/tool usage pattern (ToolOrchestra-inspired)."""
+    task_context: str
+    model_used: str
+    outcome: PatternOutcome
+    task_complexity: TaskComplexity = TaskComplexity.MEDIUM
+    tools_sequence: Optional[List[ToolInvocation]] = None
+    accuracy_score: Optional[float] = None
+    total_cost_usd: Optional[float] = None
+    total_latency_ms: Optional[int] = None
+    tokens_used: Optional[int] = None
+    user_preference_context: Optional[str] = None
+    confidence: float = 0.5
+    source: Optional[KnowledgeSource] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "task_context": self.task_context,
+            "model_used": self.model_used,
+            "outcome": self.outcome.value,
+            "task_complexity": self.task_complexity.value,
+            "tools_sequence": [t.to_dict() for t in (self.tools_sequence or [])],
+            "accuracy_score": self.accuracy_score,
+            "total_cost_usd": self.total_cost_usd,
+            "total_latency_ms": self.total_latency_ms,
+            "tokens_used": self.tokens_used,
+            "user_preference_context": self.user_preference_context,
+            "confidence": self.confidence,
+            "source": self.source.to_dict() if self.source else {}
+        }
+
+
+@dataclass
+class UserPreferenceVectorEntry:
+    """User preference vector for orchestration (ToolOrchestra-inspired)."""
+    context_name: str
+    user_id: str = "default"
+    accuracy_weight: float = 0.5
+    cost_weight: float = 0.3
+    latency_weight: float = 0.2
+    model_preferences: Optional[Dict[str, float]] = None
+    tool_preferences: Optional[Dict[str, float]] = None
+    skill_preferences: Optional[Dict[str, float]] = None
+    overrides: Optional[Dict[str, Dict[str, float]]] = None
+    source: Optional[KnowledgeSource] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "user_id": self.user_id,
+            "context_name": self.context_name,
+            "accuracy_weight": self.accuracy_weight,
+            "cost_weight": self.cost_weight,
+            "latency_weight": self.latency_weight,
+            "model_preferences": self.model_preferences or {},
+            "tool_preferences": self.tool_preferences or {},
+            "skill_preferences": self.skill_preferences or {},
+            "overrides": self.overrides or {},
+            "source": self.source.to_dict() if self.source else {}
+        }
+
+    def get_model_preference(self, model: str) -> float:
+        """Get preference score for a model (default 0.5)."""
+        return (self.model_preferences or {}).get(model, 0.5)
+
+    def get_tool_preference(self, tool: str) -> float:
+        """Get preference score for a tool (default 0.5)."""
+        return (self.tool_preferences or {}).get(tool, 0.5)
+
+    def compute_score(
+        self,
+        accuracy: float,
+        cost: float,
+        latency: float,
+        max_cost: float = 1.0,
+        max_latency: float = 10000.0
+    ) -> float:
+        """
+        Compute weighted score for an orchestration decision.
+
+        Args:
+            accuracy: Accuracy score (0-1)
+            cost: Cost in USD
+            latency: Latency in ms
+            max_cost: Max cost for normalization
+            max_latency: Max latency for normalization
+
+        Returns:
+            Weighted score (higher is better)
+        """
+        # Normalize cost and latency (invert so lower is better)
+        cost_normalized = 1.0 - min(cost / max_cost, 1.0)
+        latency_normalized = 1.0 - min(latency / max_latency, 1.0)
+
+        return (
+            accuracy * self.accuracy_weight +
+            cost_normalized * self.cost_weight +
+            latency_normalized * self.latency_weight
+        )
 
 
 # =============================================================================
@@ -671,6 +811,397 @@ class KnowledgeRepository:
                     )
 
         return recommendations
+
+    # =========================================================================
+    # ORCHESTRATION METHODS (ToolOrchestra-inspired)
+    # =========================================================================
+
+    def learn_model_pattern(
+        self,
+        task_context: str,
+        model_used: str,
+        outcome: PatternOutcome,
+        tools_sequence: Optional[List[ToolInvocation]] = None,
+        accuracy_score: Optional[float] = None,
+        total_cost_usd: Optional[float] = None,
+        total_latency_ms: Optional[int] = None,
+        tokens_used: Optional[int] = None,
+        complexity: TaskComplexity = TaskComplexity.MEDIUM,
+        preference_context: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Learn from a model/tool usage pattern.
+
+        This enables cross-session learning of which models and tools
+        work best for which task contexts.
+
+        Args:
+            task_context: Type of task (e.g., "code_review", "document_analysis")
+            model_used: Primary model used
+            outcome: Whether it succeeded
+            tools_sequence: Ordered list of tools invoked
+            accuracy_score: How accurate was the result (0-1)
+            total_cost_usd: Total cost
+            total_latency_ms: Total latency
+            tokens_used: Total tokens
+            complexity: Task complexity level
+            preference_context: User preference context active
+
+        Returns:
+            Pattern ID
+        """
+        entry = ModelPatternEntry(
+            task_context=task_context,
+            model_used=model_used,
+            outcome=outcome,
+            task_complexity=complexity,
+            tools_sequence=tools_sequence,
+            accuracy_score=accuracy_score,
+            total_cost_usd=total_cost_usd,
+            total_latency_ms=total_latency_ms,
+            tokens_used=tokens_used,
+            user_preference_context=preference_context,
+            source=KnowledgeSource(type=SourceType.SYSTEM)
+        )
+
+        if self.supabase:
+            # Use atomic UPSERT to avoid race conditions
+            # Relies on UNIQUE(task_context, model_used) constraint
+            data = entry.to_dict()
+            data["success_count"] = 1 if outcome == PatternOutcome.SUCCESS else 0
+            data["failure_count"] = 1 if outcome == PatternOutcome.FAILURE else 0
+            data["usage_count"] = 1
+
+            result = self.supabase.table("arcus_model_patterns").upsert(
+                data,
+                on_conflict="task_context,model_used",
+                # On conflict, increment counters instead of replacing
+                # Note: Supabase upsert will merge with existing row
+            ).execute()
+
+            if result.data:
+                pattern_id = result.data[0]["id"]
+                # Update counters atomically using RPC or raw SQL
+                # For now, do a follow-up update to increment counters
+                self.supabase.rpc(
+                    "increment_model_pattern_counters",
+                    {
+                        "p_task_context": task_context,
+                        "p_model_used": model_used,
+                        "p_is_success": outcome == PatternOutcome.SUCCESS,
+                        "p_is_failure": outcome == PatternOutcome.FAILURE,
+                        "p_cost": total_cost_usd,
+                        "p_latency": total_latency_ms
+                    }
+                ).execute()
+                return pattern_id
+
+            return None
+
+        return "file-based"
+
+    def get_best_pattern(
+        self,
+        task_context: str,
+        min_usage: int = 3,
+        min_success_rate: float = 0.6
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get the best performing pattern for a task context.
+
+        Args:
+            task_context: Type of task
+            min_usage: Minimum usage count to consider
+            min_success_rate: Minimum success rate threshold
+
+        Returns:
+            Best pattern or None
+        """
+        if not self.supabase:
+            return None
+
+        result = self.supabase.table("arcus_model_patterns") \
+            .select("*") \
+            .eq("task_context", task_context) \
+            .gte("usage_count", min_usage) \
+            .gte("success_rate", min_success_rate) \
+            .order("success_rate", desc=True) \
+            .limit(1) \
+            .execute()
+
+        return result.data[0] if result.data else None
+
+    def get_user_preference_vector(
+        self,
+        context_name: str = "default",
+        user_id: str = "default"
+    ) -> UserPreferenceVectorEntry:
+        """
+        Get the active preference vector for a user/context.
+
+        Args:
+            context_name: Context name (e.g., "default", "confidential")
+            user_id: User ID
+
+        Returns:
+            Preference vector (defaults provided if not found in database)
+        """
+        if not self.supabase:
+            # Return default
+            return UserPreferenceVectorEntry(context_name="default")
+
+        result = self.supabase.table("arcus_user_preference_vectors") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .eq("context_name", context_name) \
+            .eq("is_active", True) \
+            .limit(1) \
+            .execute()
+
+        if result.data:
+            data = result.data[0]
+            return UserPreferenceVectorEntry(
+                user_id=data.get("user_id", "default"),
+                context_name=data.get("context_name", "default"),
+                accuracy_weight=data.get("accuracy_weight", 0.5),
+                cost_weight=data.get("cost_weight", 0.3),
+                latency_weight=data.get("latency_weight", 0.2),
+                model_preferences=data.get("model_preferences"),
+                tool_preferences=data.get("tool_preferences"),
+                skill_preferences=data.get("skill_preferences"),
+                overrides=data.get("overrides")
+            )
+
+        return UserPreferenceVectorEntry(context_name=context_name, user_id=user_id)
+
+    def update_preference_from_feedback(
+        self,
+        feedback: str,
+        context_name: str = "default",
+        user_id: str = "default",
+        model_used: Optional[str] = None,
+        tool_used: Optional[str] = None,
+        positive: bool = True
+    ) -> bool:
+        """
+        Update preference vector based on user feedback.
+
+        Args:
+            feedback: User feedback text
+            context_name: Context name
+            user_id: User ID
+            model_used: Model that was used (to adjust preference)
+            tool_used: Tool that was used (to adjust preference)
+            positive: Whether feedback was positive
+
+        Returns:
+            Success status
+        """
+        if not self.supabase:
+            return False
+
+        # Get current preferences
+        result = self.supabase.table("arcus_user_preference_vectors") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .eq("context_name", context_name) \
+            .eq("is_active", True) \
+            .limit(1) \
+            .execute()
+
+        if not result.data:
+            # Create new preference vector
+            new_prefs = UserPreferenceVectorEntry(
+                context_name=context_name,
+                user_id=user_id,
+                source=KnowledgeSource(type=SourceType.USER_IMPLICIT)
+            )
+            self.supabase.table("arcus_user_preference_vectors") \
+                .insert(new_prefs.to_dict()) \
+                .execute()
+            result = self.supabase.table("arcus_user_preference_vectors") \
+                .select("*") \
+                .eq("user_id", user_id) \
+                .eq("context_name", context_name) \
+                .eq("is_active", True) \
+                .limit(1) \
+                .execute()
+
+        if result.data:
+            data = result.data[0]
+            update_data = {
+                "feedback_count": data.get("feedback_count", 0) + 1,
+                "last_feedback": datetime.utcnow().isoformat()
+            }
+
+            # Adjust model preference
+            if model_used:
+                model_prefs = data.get("model_preferences", {})
+                current = model_prefs.get(model_used, 0.5)
+                delta = 0.05 if positive else -0.05
+                model_prefs[model_used] = max(0.1, min(0.95, current + delta))
+                update_data["model_preferences"] = model_prefs
+
+            # Adjust tool preference
+            if tool_used:
+                tool_prefs = data.get("tool_preferences", {})
+                current = tool_prefs.get(tool_used, 0.5)
+                delta = 0.05 if positive else -0.05
+                tool_prefs[tool_used] = max(0.1, min(0.95, current + delta))
+                update_data["tool_preferences"] = tool_prefs
+
+            self.supabase.table("arcus_user_preference_vectors") \
+                .update(update_data) \
+                .eq("id", data["id"]) \
+                .execute()
+
+            return True
+
+        return False
+
+    def compute_efficiency_score(
+        self,
+        success: bool,
+        cost_usd: float,
+        latency_ms: int,
+        preference_vector: Optional[UserPreferenceVectorEntry] = None,
+        max_cost: float = 0.10,
+        max_latency: float = 30000.0
+    ) -> float:
+        """
+        Compute efficiency score for an action.
+
+        Based on ToolOrchestra's reward design:
+        - Outcome reward: 1 if success, 0 if failure
+        - Efficiency: Lower cost and latency is better
+        - Preferences: Weight by user preferences
+
+        Args:
+            success: Whether action succeeded
+            cost_usd: Cost in USD
+            latency_ms: Latency in milliseconds
+            preference_vector: User preferences
+            max_cost: Max cost for normalization
+            max_latency: Max latency for normalization
+
+        Returns:
+            Efficiency score (0-1)
+        """
+        if not success:
+            return 0.0
+
+        if preference_vector:
+            return preference_vector.compute_score(
+                accuracy=1.0,
+                cost=cost_usd,
+                latency=latency_ms,
+                max_cost=max_cost,
+                max_latency=max_latency
+            )
+
+        # Default weights
+        accuracy_weight = 0.5
+        cost_weight = 0.3
+        latency_weight = 0.2
+
+        cost_normalized = 1.0 - min(cost_usd / max_cost, 1.0)
+        latency_normalized = 1.0 - min(latency_ms / max_latency, 1.0)
+
+        return (
+            1.0 * accuracy_weight +
+            cost_normalized * cost_weight +
+            latency_normalized * latency_weight
+        )
+
+    def get_efficiency_report(self, days: int = 30) -> Dict[str, Any]:
+        """
+        Generate efficiency report for recent actions.
+
+        Args:
+            days: Number of days to analyze
+
+        Returns:
+            Efficiency report with recommendations
+        """
+        if not self.supabase:
+            return {"error": "Supabase not connected"}
+
+        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+
+        result = self.supabase.table("arcus_autonomy_audit") \
+            .select("*") \
+            .gte("executed_at", cutoff) \
+            .not_.is_("model_used", "null") \
+            .execute()
+
+        if not result.data:
+            return {
+                "period": {"start": cutoff, "end": datetime.utcnow().isoformat()},
+                "total_requests": 0,
+                "message": "No data available"
+            }
+
+        # Aggregate by model
+        model_stats: Dict[str, Dict] = {}
+        total_cost = 0.0
+        total_tokens = 0
+        total_latency = 0
+
+        for entry in result.data:
+            model = entry.get("model_used", "unknown")
+            if model not in model_stats:
+                model_stats[model] = {
+                    "count": 0,
+                    "cost": 0.0,
+                    "success": 0,
+                    "latency": 0
+                }
+
+            model_stats[model]["count"] += 1
+            model_stats[model]["cost"] += entry.get("estimated_cost_usd", 0) or 0
+            model_stats[model]["latency"] += entry.get("latency_ms", 0) or 0
+            if entry.get("outcome") == "success":
+                model_stats[model]["success"] += 1
+
+            total_cost += entry.get("estimated_cost_usd", 0) or 0
+            total_tokens += (entry.get("tokens_input", 0) or 0) + (entry.get("tokens_output", 0) or 0)
+            total_latency += entry.get("latency_ms", 0) or 0
+
+        # Compute averages and success rates
+        model_breakdown = {}
+        for model, stats in model_stats.items():
+            model_breakdown[model] = {
+                "count": stats["count"],
+                "cost": round(stats["cost"], 6),
+                "success_rate": round(stats["success"] / stats["count"], 3) if stats["count"] > 0 else 0,
+                "avg_latency_ms": round(stats["latency"] / stats["count"]) if stats["count"] > 0 else 0
+            }
+
+        # Generate recommendations
+        recommendations = []
+        for model, stats in model_breakdown.items():
+            if stats["success_rate"] < 0.7:
+                recommendations.append(f"Consider reviewing use of {model} (success rate: {stats['success_rate']:.0%})")
+            if stats["avg_latency_ms"] > 10000:
+                recommendations.append(f"{model} has high latency ({stats['avg_latency_ms']}ms avg) - consider using faster model for time-sensitive tasks")
+
+        # Check for over-reliance on expensive models
+        total_count = sum(s["count"] for s in model_breakdown.values())
+        for model in ["claude-opus", "gemini-3-pro"]:
+            if model in model_breakdown:
+                pct = model_breakdown[model]["count"] / total_count
+                if pct > 0.5:
+                    recommendations.append(f"High usage of {model} ({pct:.0%}) - consider using cheaper models for simpler tasks")
+
+        return {
+            "period": {"start": cutoff, "end": datetime.utcnow().isoformat()},
+            "total_requests": len(result.data),
+            "total_cost_usd": round(total_cost, 6),
+            "total_tokens": total_tokens,
+            "avg_latency_ms": round(total_latency / len(result.data)) if result.data else 0,
+            "model_breakdown": model_breakdown,
+            "recommendations": recommendations
+        }
 
     # =========================================================================
     # UTILITY METHODS

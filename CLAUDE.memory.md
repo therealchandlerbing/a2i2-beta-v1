@@ -57,16 +57,23 @@
 # Recent Learnings
 
 ## Session Learnings (Last 7 Days)
-1. **2026-01-24**: User wants modular, future-proof architecture
+1. **2026-01-25**: ToolOrchestra review - orchestration paradigm insights
+   - Small orchestrators (8B) can coordinate larger tools efficiently
+   - Multi-objective rewards: accuracy + efficiency + user preferences
+   - A2I2 could add Skill Orchestration Layer for routing
+   - Tool patterns should become procedural memory
+   - User preference vectors enable runtime control
+
+2. **2026-01-24**: User wants modular, future-proof architecture
    - Design for capabilities that don't exist yet
    - Build knowledge foundation now for future AI capabilities
    - Vision: AI companion like R2-D2 or Enterprise computer
 
-2. **2026-01-24**: User prefers architecture-first approach
+3. **2026-01-24**: User prefers architecture-first approach
    - Complete design documents before implementation
    - Think through full system before building pieces
 
-3. **2026-01-24**: Real-time voice agent is a future goal
+4. **2026-01-24**: Real-time voice agent is a future goal
    - Memory-enabled voice interface
    - Autonomous decision-making (with training)
    - Current focus is building knowledge foundation
@@ -95,6 +102,9 @@
 - Which voice technology stack to use?
 - How to balance comprehensive capture vs. privacy?
 - Specific autonomy boundaries for Phase 2?
+- Should A2I2 add a Skill Orchestration Layer? (ToolOrchestra insight)
+- How to implement user preference vectors for skill routing?
+- Should tool patterns become a new procedural memory type?
 
 ---
 
@@ -120,6 +130,9 @@
 ## Recent Captures
 | Timestamp | Type | Summary | Confidence |
 |-----------|------|---------|------------|
+| 2026-01-25 | semantic | ToolOrchestra orchestration paradigm | 0.95 |
+| 2026-01-25 | semantic | Multi-objective rewards for efficiency | 0.90 |
+| 2026-01-25 | procedural | Skill orchestration layer pattern | 0.85 |
 | 2026-01-24 | preference | Modular architecture preference | 0.95 |
 | 2026-01-24 | preference | Architecture-first approach | 0.95 |
 | 2026-01-24 | semantic | Vision: R2-D2 level AI companion | 0.90 |

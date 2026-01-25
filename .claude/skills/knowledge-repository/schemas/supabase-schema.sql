@@ -466,6 +466,7 @@ COMMENT ON TABLE arcus_session_state IS 'Session state and working memory tracki
 -- ============================================================================
 -- AUTONOMY AUDIT LOG
 -- Tracks all autonomous actions for governance and learning
+-- Enhanced with ToolOrchestra-inspired efficiency tracking
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS arcus_autonomy_audit (
@@ -498,6 +499,24 @@ CREATE TABLE IF NOT EXISTS arcus_autonomy_audit (
     )),
     outcome_details TEXT,
 
+    -- =========================================================================
+    -- EFFICIENCY TRACKING (ToolOrchestra-inspired)
+    -- Enables cost/latency optimization and model selection analysis
+    -- =========================================================================
+    tokens_input INTEGER DEFAULT 0,          -- Input tokens consumed
+    tokens_output INTEGER DEFAULT 0,         -- Output tokens generated
+    tokens_thinking INTEGER DEFAULT 0,       -- Thinking/reasoning tokens (for Gemini)
+    estimated_cost_usd DECIMAL(10, 6),       -- Estimated cost in USD
+    latency_ms INTEGER,                      -- Total latency in milliseconds
+
+    -- Model/tool tracking
+    model_used TEXT,                         -- Primary model used (e.g., 'gemini-3-flash')
+    tools_invoked JSONB DEFAULT '[]',        -- Array of tools used: [{name, latency_ms, cost, success}]
+    thinking_level TEXT,                     -- Thinking level used (minimal/low/medium/high)
+
+    -- Efficiency scoring
+    efficiency_score DECIMAL(4, 3),          -- Computed: outcome_success / (normalized_cost + normalized_latency)
+
     -- Human involvement
     human_approval_required BOOLEAN DEFAULT FALSE,
     human_approved BOOLEAN,
@@ -517,6 +536,12 @@ CREATE TABLE IF NOT EXISTS arcus_autonomy_audit (
     metadata JSONB DEFAULT '{}'
 );
 
+-- Additional indexes for efficiency analysis
+CREATE INDEX IF NOT EXISTS idx_audit_model ON arcus_autonomy_audit(model_used);
+CREATE INDEX IF NOT EXISTS idx_audit_cost ON arcus_autonomy_audit(estimated_cost_usd DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_latency ON arcus_autonomy_audit(latency_ms DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_efficiency ON arcus_autonomy_audit(efficiency_score DESC) WHERE efficiency_score IS NOT NULL;
+
 -- Indexes for audit
 CREATE INDEX IF NOT EXISTS idx_audit_action ON arcus_autonomy_audit(action_type);
 CREATE INDEX IF NOT EXISTS idx_audit_category ON arcus_autonomy_audit(action_category);
@@ -527,6 +552,184 @@ CREATE INDEX IF NOT EXISTS idx_audit_executed ON arcus_autonomy_audit(executed_a
 CREATE INDEX IF NOT EXISTS idx_audit_session ON arcus_autonomy_audit(session_id);
 
 COMMENT ON TABLE arcus_autonomy_audit IS 'Audit log for all autonomous actions';
+
+-- ============================================================================
+-- MODEL/TOOL PATTERNS
+-- Tracks which models/tools work best for which task contexts
+-- Inspired by ToolOrchestra's outcome-based learning
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS arcus_model_patterns (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- Pattern identification
+    task_context TEXT NOT NULL,              -- e.g., "code_review", "document_analysis", "voice_response"
+    task_complexity TEXT DEFAULT 'medium' CHECK (task_complexity IN ('low', 'medium', 'high')),
+
+    -- Model/tool sequence that worked
+    model_used TEXT NOT NULL,                -- Primary model (e.g., 'gemini-3-flash', 'claude-sonnet')
+    tools_sequence JSONB DEFAULT '[]',       -- Ordered tools: [{name, params_hash, success}]
+
+    -- Outcome tracking
+    outcome TEXT NOT NULL CHECK (outcome IN ('success', 'partial', 'failure')),
+    accuracy_score FLOAT CHECK (accuracy_score >= 0 AND accuracy_score <= 1),
+
+    -- Efficiency metrics
+    total_cost_usd DECIMAL(10, 6),
+    total_latency_ms INTEGER,
+    tokens_used INTEGER,
+
+    -- User context
+    user_preference_context TEXT,            -- e.g., "cost_sensitive", "latency_sensitive", "accuracy_first"
+
+    -- Learning metrics
+    usage_count INTEGER DEFAULT 1,
+    success_count INTEGER DEFAULT 0,
+    failure_count INTEGER DEFAULT 0,
+    success_rate FLOAT GENERATED ALWAYS AS (
+        CASE WHEN usage_count > 0 THEN success_count::FLOAT / usage_count ELSE 0 END
+    ) STORED,
+
+    -- Confidence and quality
+    confidence FLOAT DEFAULT 0.5 CHECK (confidence >= 0 AND confidence <= 1),
+
+    -- Source
+    source JSONB NOT NULL DEFAULT '{}',
+
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    last_used TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Metadata
+    metadata JSONB DEFAULT '{}',
+
+    -- Embedding for similarity search
+    embedding VECTOR(1536),
+
+    -- UNIQUE constraint for UPSERT operations (prevents race conditions)
+    UNIQUE(task_context, model_used)
+);
+
+-- RPC function for atomic counter updates (prevents race conditions)
+CREATE OR REPLACE FUNCTION increment_model_pattern_counters(
+    p_task_context TEXT,
+    p_model_used TEXT,
+    p_is_success BOOLEAN,
+    p_is_failure BOOLEAN,
+    p_cost DECIMAL(10, 6) DEFAULT NULL,
+    p_latency INTEGER DEFAULT NULL
+)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE arcus_model_patterns
+    SET
+        usage_count = usage_count + 1,
+        success_count = success_count + CASE WHEN p_is_success THEN 1 ELSE 0 END,
+        failure_count = failure_count + CASE WHEN p_is_failure THEN 1 ELSE 0 END,
+        total_cost_usd = COALESCE(p_cost, total_cost_usd),
+        total_latency_ms = COALESCE(p_latency, total_latency_ms),
+        last_used = NOW(),
+        updated_at = NOW()
+    WHERE task_context = p_task_context AND model_used = p_model_used;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Indexes for model patterns
+CREATE INDEX IF NOT EXISTS idx_pattern_context ON arcus_model_patterns(task_context);
+CREATE INDEX IF NOT EXISTS idx_pattern_model ON arcus_model_patterns(model_used);
+CREATE INDEX IF NOT EXISTS idx_pattern_outcome ON arcus_model_patterns(outcome);
+CREATE INDEX IF NOT EXISTS idx_pattern_success_rate ON arcus_model_patterns(success_rate DESC) WHERE usage_count >= 3;
+CREATE INDEX IF NOT EXISTS idx_pattern_complexity ON arcus_model_patterns(task_complexity);
+CREATE INDEX IF NOT EXISTS idx_pattern_last_used ON arcus_model_patterns(last_used DESC);
+
+COMMENT ON TABLE arcus_model_patterns IS 'Model/tool usage patterns - tracks what works for which tasks';
+
+-- ============================================================================
+-- USER PREFERENCE VECTORS
+-- Numerical preferences that modify model/skill routing
+-- Inspired by ToolOrchestra's preference-aware optimization
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS arcus_user_preference_vectors (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- User/context identification
+    user_id TEXT DEFAULT 'default',
+    context_name TEXT NOT NULL,              -- e.g., "default", "confidential_data", "time_critical"
+
+    -- Objective weights (should sum to 1.0 for normalized scoring)
+    accuracy_weight FLOAT DEFAULT 0.5 CHECK (accuracy_weight >= 0 AND accuracy_weight <= 1),
+    cost_weight FLOAT DEFAULT 0.3 CHECK (cost_weight >= 0 AND cost_weight <= 1),
+    latency_weight FLOAT DEFAULT 0.2 CHECK (latency_weight >= 0 AND latency_weight <= 1),
+    -- Note: Sum constraint enforced at application level for flexibility
+    CONSTRAINT weights_sum_check CHECK (accuracy_weight + cost_weight + latency_weight BETWEEN 0.99 AND 1.01),
+
+    -- Model preferences (0.0 = avoid, 1.0 = strongly prefer)
+    model_preferences JSONB DEFAULT '{
+        "claude-opus": 0.5,
+        "claude-sonnet": 0.7,
+        "claude-haiku": 0.6,
+        "gemini-3-pro": 0.6,
+        "gemini-3-flash": 0.7,
+        "gemini-2.5-flash": 0.8,
+        "personaplex": 0.9
+    }',
+
+    -- Tool preferences
+    tool_preferences JSONB DEFAULT '{
+        "web_search": 0.5,
+        "local_search": 0.7,
+        "code_execution": 0.6,
+        "deep_research": 0.4
+    }',
+
+    -- Skill preferences
+    skill_preferences JSONB DEFAULT '{
+        "knowledge_repository": 0.8,
+        "research": 0.6,
+        "code_analysis": 0.7
+    }',
+
+    -- Context-specific overrides
+    overrides JSONB DEFAULT '{}',            -- {condition: {field: value}}
+
+    -- Learning from feedback
+    feedback_count INTEGER DEFAULT 0,
+    last_feedback TIMESTAMPTZ,
+
+    -- Active/archived
+    is_active BOOLEAN DEFAULT TRUE,
+
+    -- Source
+    source JSONB NOT NULL DEFAULT '{}',
+
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Metadata
+    metadata JSONB DEFAULT '{}',
+
+    -- Ensure one active preference vector per user per context
+    UNIQUE(user_id, context_name) WHERE is_active = TRUE
+);
+
+-- Indexes for preference vectors
+CREATE INDEX IF NOT EXISTS idx_pref_user ON arcus_user_preference_vectors(user_id);
+CREATE INDEX IF NOT EXISTS idx_pref_context ON arcus_user_preference_vectors(context_name);
+CREATE INDEX IF NOT EXISTS idx_pref_active ON arcus_user_preference_vectors(is_active) WHERE is_active = TRUE;
+
+COMMENT ON TABLE arcus_user_preference_vectors IS 'User preference vectors for model/tool routing optimization';
+
+-- Default preference vector
+INSERT INTO arcus_user_preference_vectors (
+    user_id, context_name, accuracy_weight, cost_weight, latency_weight,
+    source
+) VALUES (
+    'default', 'default', 0.5, 0.3, 0.2,
+    '{"type": "system", "note": "Initial default preferences"}'
+) ON CONFLICT DO NOTHING;
 
 -- ============================================================================
 -- VECTOR SIMILARITY INDEXES (for semantic search)

@@ -22,6 +22,7 @@
 | [docs/PRACTICAL-IMPLEMENTATION.md](docs/PRACTICAL-IMPLEMENTATION.md) | **What we can build TODAY** | Ready to start building |
 | [docs/PERSONAPLEX-INTEGRATION.md](docs/PERSONAPLEX-INTEGRATION.md) | **NVIDIA PersonaPlex full-duplex voice** | True R2-D2 experience |
 | [docs/STRATEGIC-REVIEW.md](docs/STRATEGIC-REVIEW.md) | **Novel IP & Enterprise Architecture** | Building defensible platform |
+| [docs/TOOLORCHESTRA-REVIEW.md](docs/TOOLORCHESTRA-REVIEW.md) | **NVIDIA ToolOrchestra lessons for A2I2** | Skill orchestration & efficiency |
 
 ## Schemas & Types
 
