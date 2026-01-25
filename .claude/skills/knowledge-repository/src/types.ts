@@ -1657,3 +1657,514 @@ export interface SkillRewardPerformance {
   preferred_model?: string;
   recommendations: string[];
 }
+
+// ============================================================================
+// PHASE 4: VOICE ORCHESTRATION TYPES
+// ============================================================================
+
+export type VoiceProvider = 'personaplex' | 'gemini_live' | 'gemini_tts';
+
+export type ResponseMode = 'immediate' | 'streaming' | 'progressive' | 'interruptible';
+
+export type VoiceIntent =
+  | 'quick_answer'
+  | 'recall'
+  | 'command'
+  | 'clarification'
+  | 'conversation'
+  | 'complex_query';
+
+export interface VoiceConfig {
+  max_first_response_ms: number;
+  max_complete_response_ms: number;
+  streaming_chunk_ms: number;
+  primary_provider: VoiceProvider;
+  fallback_provider: VoiceProvider;
+  default_response_mode: ResponseMode;
+  allow_interrupt: boolean;
+  interrupt_saves_context: boolean;
+  voice_skill_weights: Record<string, number>;
+  enable_proactive_prep: boolean;
+  prep_cache_ttl_seconds: number;
+  anticipation_window_ms: number;
+  min_confidence_for_immediate: number;
+  min_confidence_for_streaming: number;
+}
+
+export interface VoiceQuery {
+  id: string;
+  text: string;
+  user_id: string;
+  session_id: string;
+  timestamp: string;
+  audio_duration_ms?: number;
+  speech_confidence: number;
+  detected_language: string;
+  conversation_history: Array<Record<string, unknown>>;
+  active_entities: string[];
+  current_topic?: string;
+  response_mode?: ResponseMode;
+  max_response_length?: number;
+}
+
+export interface VoiceResponseChunk {
+  chunk_id: string;
+  sequence: number;
+  text: string;
+  is_final: boolean;
+  generated_at: string;
+  latency_ms?: number;
+  confidence: number;
+  source_skill?: string;
+  can_interrupt_after: boolean;
+}
+
+export interface VoiceResponse {
+  id: UUID;
+  query_id: string;
+  chunks: VoiceResponseChunk[];
+  first_chunk_latency_ms: number;
+  total_latency_ms: number;
+  provider_used: VoiceProvider;
+  response_mode: ResponseMode;
+  intent_detected: VoiceIntent;
+  overall_confidence: number;
+  skills_used: string[];
+  context_tokens_used: number;
+  was_interrupted: boolean;
+  interrupt_point?: number;
+  saved_context?: Record<string, unknown>;
+  anticipated_follow_ups: string[];
+  prepared_responses: Record<string, string>;
+}
+
+export interface VNKGEntry {
+  id: UUID;
+  content: string;
+  spoken_form: string;
+  phonetic_hints: string[];
+  brevity_score: number;
+  keywords: string[];
+  entity_refs: string[];
+  topic_tags: string[];
+  voice_retrieval_count: number;
+  avg_retrieval_latency_ms: number;
+  user_satisfaction_score: number;
+  created_at: string;
+  last_accessed: string;
+  ttl_seconds?: number;
+}
+
+export interface ProactivePreparation {
+  id: UUID;
+  trigger_patterns: string[];
+  prepared_response: string;
+  confidence: number;
+  required_entities: string[];
+  required_topic?: string;
+  created_at: string;
+  expires_at: string;
+  used_count: number;
+}
+
+export interface VoiceLatencyStats {
+  total_requests: number;
+  avg_latency_ms: number;
+  min_latency_ms: number;
+  max_latency_ms: number;
+  p50_latency_ms: number;
+  p95_latency_ms: number;
+  under_250ms_rate: number;
+}
+
+// ============================================================================
+// PHASE 4: DIGITAL TWIN TYPES
+// ============================================================================
+
+export type CognitiveStyle =
+  | 'analytical'
+  | 'intuitive'
+  | 'directive'
+  | 'conceptual'
+  | 'behavioral';
+
+export type CommunicationStyle =
+  | 'direct'
+  | 'detailed'
+  | 'visual'
+  | 'narrative'
+  | 'structured';
+
+export type TimeOrientation =
+  | 'past_focused'
+  | 'present_focused'
+  | 'future_focused';
+
+export type RiskTolerance =
+  | 'risk_averse'
+  | 'risk_neutral'
+  | 'risk_seeking';
+
+export type InformationProcessing =
+  | 'sequential'
+  | 'holistic'
+  | 'comparative'
+  | 'iterative';
+
+export interface CognitiveProfile {
+  id: UUID;
+  user_id: string;
+  cognitive_styles: Record<CognitiveStyle, number>;
+  communication_style: CommunicationStyle;
+  time_orientation: TimeOrientation;
+  risk_tolerance: RiskTolerance;
+  information_processing: InformationProcessing;
+  profile_confidence: number;
+  observations_count: number;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface DecisionPattern {
+  id: UUID;
+  user_id: string;
+  pattern_type: string;
+  context_tags: string[];
+  decision_factors: string[];
+  typical_questions: string[];
+  information_needs: string[];
+  decision_timeline: string;
+  successful_outcomes: number;
+  unsuccessful_outcomes: number;
+  confidence: number;
+  times_observed: number;
+  last_observed: string;
+}
+
+export interface ReasoningPreference {
+  id: UUID;
+  user_id: string;
+  domain: string;
+  preferred_frameworks: string[];
+  data_preferences: string[];
+  analogies_used: string[];
+  biases_detected: string[];
+  analysis_depth: 'surface' | 'moderate' | 'deep';
+  verification_level: 'trust' | 'verify' | 'deep_verify';
+  confidence: number;
+  observations: number;
+}
+
+export interface AnticipatedNeed {
+  id: UUID;
+  user_id: string;
+  need_type: string;
+  description: string;
+  context_triggers: string[];
+  time_triggers: string[];
+  prepared_content?: string;
+  preparation_confidence: number;
+  times_anticipated: number;
+  times_fulfilled: number;
+  accuracy_rate: number;
+  valid_from: string;
+  valid_until?: string;
+}
+
+export interface InteractionSignal {
+  id: UUID;
+  user_id: string;
+  timestamp: string;
+  signal_type: 'question' | 'correction' | 'approval' | 'rejection' | 'feedback';
+  topic: string;
+  entities_involved: string[];
+  task_type: string;
+  content: string;
+  sentiment: 'positive' | 'negative' | 'neutral';
+  urgency: 'low' | 'medium' | 'high';
+  response_given?: string;
+  response_accepted?: boolean;
+  correction_made?: string;
+}
+
+export interface ProactiveSuggestion {
+  id: UUID;
+  user_id: string;
+  suggestion_type: string;
+  content: string;
+  reasoning: string;
+  confidence: number;
+  relevance_score: number;
+  urgency: string;
+  triggered_by: string[];
+  context_match_score: number;
+  presented: boolean;
+  accepted?: boolean;
+  feedback?: string;
+  presented_at?: string;
+}
+
+export interface DigitalTwinSummary {
+  user_id: string;
+  profile: {
+    primary_style?: CognitiveStyle;
+    communication_style: CommunicationStyle;
+    time_orientation: TimeOrientation;
+    risk_tolerance: RiskTolerance;
+    information_processing: InformationProcessing;
+    confidence: number;
+    observations: number;
+  };
+  patterns: {
+    decision_patterns: number;
+    reasoning_preferences: number;
+  };
+  anticipation: {
+    anticipated_needs: number;
+    interaction_history: number;
+  };
+  last_updated: string;
+}
+
+// ============================================================================
+// PHASE 4: EMBEDDING TYPES
+// ============================================================================
+
+export type EmbeddingProvider = 'openai' | 'voyage' | 'cohere' | 'local' | 'mock';
+
+export type EmbeddingModel =
+  | 'text-embedding-3-small'
+  | 'text-embedding-3-large'
+  | 'voyage-3'
+  | 'voyage-code-3'
+  | 'voyage-3-lite'
+  | 'embed-english-v3.0'
+  | 'embed-multilingual-v3.0'
+  | 'all-MiniLM-L6-v2'
+  | 'all-mpnet-base-v2';
+
+export interface EmbeddingConfig {
+  provider: EmbeddingProvider;
+  model: EmbeddingModel;
+  dimensions: number;
+  batch_size: number;
+  max_tokens_per_batch: number;
+  cache_enabled: boolean;
+  cache_ttl_hours: number;
+  normalize_embeddings: boolean;
+  truncate_long_texts: boolean;
+  max_text_length: number;
+  track_costs: boolean;
+}
+
+export interface EmbeddingResult {
+  id: UUID;
+  text_hash: string;
+  embedding: number[];
+  model: string;
+  dimensions: number;
+  text_length: number;
+  tokens_used: number;
+  latency_ms: number;
+  cost_usd: number;
+  created_at: string;
+  expires_at?: string;
+}
+
+export interface SearchResult {
+  id: string;
+  content: string;
+  memory_type: string;
+  similarity_score: number;
+  metadata: Record<string, unknown>;
+  highlights: string[];
+}
+
+export interface HybridSearchResult {
+  id: string;
+  content: string;
+  memory_type: string;
+  vector_score: number;
+  keyword_score: number;
+  combined_score: number;
+  metadata: Record<string, unknown>;
+  matched_keywords: string[];
+}
+
+export interface EmbeddingStats {
+  total_embeddings: number;
+  total_tokens: number;
+  total_cost_usd: number;
+  avg_latency_ms: number;
+  cache_hits: number;
+  cache_misses: number;
+  cache_hit_rate: number;
+}
+
+export interface VectorIndexStats {
+  total_vectors: number;
+  memory_types: Record<string, number>;
+  avg_vector_dim: number;
+}
+
+export interface SemanticSearchStats {
+  vector_index: VectorIndexStats;
+  keyword_index: {
+    total_documents: number;
+    total_terms: number;
+  };
+  embedding_service: EmbeddingStats;
+}
+
+// ============================================================================
+// PHASE 4: DATABASE RECORD TYPES
+// ============================================================================
+
+export interface VNKGEntryRecord {
+  id: UUID;
+  content: string;
+  spoken_form: string;
+  phonetic_hints: string[];
+  brevity_score: number;
+  keywords: string[];
+  entity_refs: string[];
+  topic_tags: string[];
+  voice_retrieval_count: number;
+  avg_retrieval_latency_ms: number;
+  user_satisfaction_score: number;
+  ttl_seconds?: number;
+  created_at: string;
+  last_accessed: string;
+  embedding?: number[];
+  metadata: Record<string, unknown>;
+}
+
+export interface VoiceQueryRecord {
+  id: UUID;
+  query_text: string;
+  user_id: string;
+  session_id?: string;
+  audio_duration_ms?: number;
+  speech_confidence: number;
+  detected_language: string;
+  detected_intent?: VoiceIntent;
+  intent_confidence?: number;
+  first_chunk_latency_ms?: number;
+  total_latency_ms?: number;
+  provider_used?: string;
+  response_mode?: ResponseMode;
+  skills_used: string[];
+  context_tokens_used: number;
+  overall_confidence?: number;
+  was_interrupted: boolean;
+  interrupt_point?: number;
+  created_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface CognitiveProfileRecord {
+  id: UUID;
+  user_id: string;
+  cognitive_styles: Record<string, number>;
+  communication_style: CommunicationStyle;
+  time_orientation: TimeOrientation;
+  risk_tolerance: RiskTolerance;
+  information_processing: InformationProcessing;
+  profile_confidence: number;
+  observations_count: number;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface DecisionPatternRecord {
+  id: UUID;
+  user_id: string;
+  pattern_type: string;
+  context_tags: string[];
+  decision_factors: string[];
+  typical_questions: string[];
+  information_needs: string[];
+  decision_timeline: string;
+  successful_outcomes: number;
+  unsuccessful_outcomes: number;
+  confidence: number;
+  times_observed: number;
+  last_observed: string;
+  created_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface InteractionSignalRecord {
+  id: UUID;
+  user_id: string;
+  timestamp: string;
+  signal_type: string;
+  topic?: string;
+  entities_involved: string[];
+  task_type?: string;
+  content: string;
+  sentiment: string;
+  urgency: string;
+  response_given?: string;
+  response_accepted?: boolean;
+  correction_made?: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface EmbeddingCacheRecord {
+  id: UUID;
+  text_hash: string;
+  embedding: number[];
+  model: string;
+  dimensions: number;
+  text_length?: number;
+  tokens_used?: number;
+  latency_ms?: number;
+  cost_usd: number;
+  created_at: string;
+  expires_at?: string;
+  access_count: number;
+  last_accessed: string;
+  metadata: Record<string, unknown>;
+}
+
+// ============================================================================
+// PHASE 4: ANALYTICS AND VIEWS
+// ============================================================================
+
+export interface VoiceLatencyStatsView {
+  user_id: string;
+  hour: string;
+  query_count: number;
+  avg_first_chunk_ms: number;
+  avg_total_ms: number;
+  p50_latency: number;
+  p95_latency: number;
+  under_250ms_rate: number;
+}
+
+export interface DigitalTwinSummaryView {
+  user_id: string;
+  cognitive_styles: Record<string, number>;
+  communication_style: CommunicationStyle;
+  time_orientation: TimeOrientation;
+  risk_tolerance: RiskTolerance;
+  profile_confidence: number;
+  observations_count: number;
+  decision_patterns_count: number;
+  interaction_signals_count: number;
+  active_anticipated_needs: number;
+  updated_at: string;
+}
+
+export interface VNKGPerformanceView {
+  total_entries: number;
+  avg_brevity_score: number;
+  total_retrievals: number;
+  avg_latency: number;
+  avg_satisfaction: number;
+  unique_keywords: number;
+  unique_entities: number;
+}

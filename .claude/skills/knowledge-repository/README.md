@@ -614,6 +614,233 @@ if next_level:
 
 ---
 
+## Voice-Optimized Orchestration *(NEW - Phase 4)*
+
+Ultra-low latency skill routing for voice interactions, targeting <250ms first response.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      VOICE ORCHESTRATION FLOW                                │
+│                                                                              │
+│   Voice Query                                                                │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │  "What's the status of the TechCorp project?"                   │       │
+│   │  latency_budget: <250ms                                         │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                  FAST PATH CHECKS                                │       │
+│   │                                                                   │       │
+│   │   1. Proactive Cache  ──► Prepared response? (~10ms)            │       │
+│   │   2. VNKG Retrieval   ──► Voice-optimized entry? (~50ms)        │       │
+│   │   3. Intent Classify  ──► Quick answer possible? (~20ms)        │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                VOICE SKILL ROUTER                                │       │
+│   │                                                                   │       │
+│   │   recall: 1.0 (fast) │ entity_lookup: 0.9 │ deep_research: 0.1  │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │   PersonaPlex (<250ms)  ──►  First chunk streamed               │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Fast Path** | Check proactive cache and VNKG before skill routing |
+| **VNKG** | Voice-Native Knowledge Graph with spoken-form entries |
+| **Intent Classification** | Route simple queries to fast paths |
+| **Streaming Response** | Start speaking while computing more |
+| **Interrupt Handling** | Save context when user interrupts |
+
+### Quick Example
+
+```python
+from voice_orchestrator import VoiceOrchestrator, VoiceQuery
+
+orchestrator = VoiceOrchestrator()
+
+# Process a voice query
+query = VoiceQuery(
+    id="q1",
+    text="What's the status of the TechCorp project?",
+    user_id="default",
+    session_id="session123",
+    active_entities=["TechCorp"]
+)
+
+response = await orchestrator.process_query(query)
+
+print(f"First chunk: {response.first_chunk_latency_ms}ms")  # Target: <250ms
+print(f"Intent: {response.intent_detected}")
+print(f"Provider: {response.provider_used}")
+```
+
+---
+
+## Digital Twin Modeling *(NEW - Phase 4)*
+
+Model HOW users think, not just what they know, enabling personalized assistance.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      DIGITAL TWIN ARCHITECTURE                               │
+│                                                                              │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                   COGNITIVE PROFILE                              │       │
+│   │                                                                   │       │
+│   │   Cognitive Styles:                                              │       │
+│   │   ├── Analytical:  ████████░░  80%                              │       │
+│   │   ├── Conceptual:  ██████░░░░  60%                              │       │
+│   │   ├── Directive:   ████░░░░░░  40%                              │       │
+│   │   └── Behavioral:  ███░░░░░░░  30%                              │       │
+│   │                                                                   │       │
+│   │   Communication: Direct   │  Time: Future-focused               │       │
+│   │   Risk: Neutral           │  Processing: Sequential             │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                 PATTERN DETECTION                                │       │
+│   │                                                                   │       │
+│   │   Decision Patterns:                                             │       │
+│   │   • Planning tasks → asks for data first                        │       │
+│   │   • Code review → prefers bullet points                         │       │
+│   │   • Research → wants comprehensive context                      │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │              PROACTIVE SUGGESTIONS                               │       │
+│   │                                                                   │       │
+│   │   "You typically want to know the timeline. The deadline is     │       │
+│   │    next Friday."                                                 │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Cognitive Styles** | Analytical, Intuitive, Directive, Conceptual, Behavioral |
+| **Communication Prefs** | Direct, Detailed, Visual, Narrative, Structured |
+| **Decision Patterns** | Learn what info users need for decisions |
+| **Proactive Suggestions** | Anticipate needs before they're asked |
+
+### Quick Example
+
+```python
+from digital_twin import DigitalTwinEngine
+
+engine = DigitalTwinEngine()
+
+# Record an interaction
+engine.record_interaction(
+    user_id="default",
+    signal_type="question",
+    content="Can you show me the data breakdown?",
+    topic="planning",
+    task_type="analysis"
+)
+
+# Get personalized context
+context = engine.get_personalized_context(
+    user_id="default",
+    task_type="planning"
+)
+
+print(f"Style: {context['profile']['primary_style']}")  # "analytical"
+print(f"Recommendations: {context['recommendations']}")
+```
+
+---
+
+## Semantic Search with Embeddings *(NEW - Phase 4)*
+
+Vector embeddings enable semantic similarity search across all memory types.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      SEMANTIC SEARCH FLOW                                    │
+│                                                                              │
+│   Query: "How do we handle enterprise client onboarding?"                   │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                  EMBEDDING SERVICE                               │       │
+│   │                                                                   │       │
+│   │   Provider: OpenAI  │  Model: text-embedding-3-small            │       │
+│   │   Dimensions: 1536  │  Cache: Enabled (168h TTL)                │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                  HYBRID SEARCH                                   │       │
+│   │                                                                   │       │
+│   │   Vector Search (70%)  ──► Semantic similarity                  │       │
+│   │   Keyword Search (30%) ──► Term matching                        │       │
+│   │                                                                   │       │
+│   │   Combined Score = 0.7 × vector + 0.3 × keyword                 │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │   Results:                                                       │       │
+│   │   1. [procedural] Client onboarding workflow (0.92)             │       │
+│   │   2. [episodic] TechCorp onboarding meeting (0.87)              │       │
+│   │   3. [semantic] Enterprise client requirements (0.84)           │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Multi-Provider** | OpenAI, Voyage, Cohere, or local embeddings |
+| **Embedding Cache** | Reduce costs with intelligent caching |
+| **Hybrid Search** | Combine semantic and keyword matching |
+| **Cross-Memory Search** | Search across all memory types at once |
+
+### Quick Example
+
+```python
+from embeddings import SemanticSearchEngine
+
+engine = SemanticSearchEngine()
+
+# Index memories
+await engine.index_memory(
+    id="mem1",
+    content="The client onboarding process takes 2 weeks",
+    memory_type="procedural"
+)
+
+# Semantic search
+results = await engine.search(
+    query="How long does onboarding take?",
+    top_k=5,
+    search_mode="hybrid"
+)
+
+for result in results:
+    print(f"[{result.memory_type}] {result.combined_score:.2f}: {result.content[:50]}")
+```
+
+---
+
 ## Core Operations
 
 ### LEARN - Capture Knowledge
@@ -680,17 +907,20 @@ Periodic synthesis:
 │   └── TOOLORCHESTRA-REVIEW.md # ToolOrchestra analysis & enhancements
 │
 ├── schemas/
-│   └── supabase-schema.sql     # Database schema (Phase 1-3 tables)
+│   └── supabase-schema.sql     # Database schema (Phase 1-4 tables)
 │
 ├── src/
-│   ├── types.ts                # TypeScript type definitions (Phase 1-3)
+│   ├── types.ts                # TypeScript type definitions (Phase 1-4)
 │   ├── knowledge_operations.py # Core Python operations
 │   ├── model_router.py         # Intelligent model routing
 │   ├── context_budget.py       # Dynamic context budgeting (Phase 2)
 │   ├── skill_orchestrator.py   # Skill orchestration layer (Phase 2)
-│   ├── reward_signals.py       # Normalized reward computation (NEW - Phase 3)
-│   ├── data_synthesis.py       # Synthetic data generation (NEW - Phase 3)
-│   └── trust_engine.py         # Autonomy trust progression (NEW - Phase 3)
+│   ├── reward_signals.py       # Normalized reward computation (Phase 3)
+│   ├── data_synthesis.py       # Synthetic data generation (Phase 3)
+│   ├── trust_engine.py         # Autonomy trust progression (Phase 3)
+│   ├── voice_orchestrator.py   # Voice-optimized skill routing (NEW - Phase 4)
+│   ├── digital_twin.py         # Digital twin modeling (NEW - Phase 4)
+│   └── embeddings.py           # Vector embeddings & search (NEW - Phase 4)
 │
 ├── config/
 │   └── memory-template.md      # Template for CLAUDE.memory.md
@@ -762,13 +992,21 @@ Currently starting at Level 0, building trust through successful interactions.
 - Domain definitions for enterprise, technology, legal, healthcare
 - Boundary enforcement and downgrade triggers
 
-### Phase 4: Voice & Autonomy (Planned)
-- Real-time voice interface via PersonaPlex
-- Voice-Native Knowledge Graph (VNKG)
-- Digital Twin Modeling (DTM)
-- Proactive task execution
+### Phase 4: Voice & Advanced Autonomy (Completed)
+- **Voice-Optimized Orchestration** - <250ms first response targeting PersonaPlex
+- **Digital Twin Modeling** - Model HOW users think
+- **Vector Embeddings** - Semantic search across all memory types
+- Voice-Native Knowledge Graph (VNKG) for spoken retrieval
+- Proactive preparation and follow-up anticipation
+- Cognitive profile detection and adaptation
+- Hybrid search (vector + keyword)
+
+### Phase 5: Federation & Scale (Planned)
 - Federated organizational intelligence
-- Vector embeddings for semantic search
+- Cross-organization pattern learning
+- Proactive task execution
+- Multi-tenant memory isolation
+- Enterprise deployment patterns
 
 ## Configuration
 
@@ -826,6 +1064,28 @@ Located at repository root, this file:
 - Ensure feedback is being provided
 
 ## Version History
+
+### v1.4.0 (2026-01-25) - Phase 4: Voice & Advanced Autonomy
+- **Voice-Optimized Orchestration** - Ultra-low latency skill routing for voice (<250ms target)
+- **Digital Twin Modeling** - Cognitive profile detection and personalized assistance
+- **Vector Embeddings** - Semantic search with hybrid vector + keyword matching
+- Voice-Native Knowledge Graph (VNKG) with spoken-form entries
+- Proactive preparation cache with follow-up anticipation
+- Intent classification for fast-path routing
+- Interrupt handling with context preservation
+- Cognitive style detection (analytical, intuitive, directive, conceptual, behavioral)
+- Communication preference learning (direct, detailed, visual, narrative, structured)
+- Decision pattern recognition and information need anticipation
+- Multi-provider embedding support (OpenAI, Voyage, Cohere, local)
+- Embedding cache with configurable TTL
+- Cross-memory-type semantic search
+- New `voice_orchestrator.py` for voice-optimized skill routing
+- New `digital_twin.py` for cognitive modeling
+- New `embeddings.py` for vector embeddings and semantic search
+- New database tables: `arcus_vnkg_entries`, `arcus_voice_queries`, `arcus_proactive_preparations`, `arcus_cognitive_profiles`, `arcus_decision_patterns`, `arcus_interaction_signals`, `arcus_anticipated_needs`, `arcus_embedding_cache`, `arcus_search_index`
+- New RPC functions: `record_voice_query()`, `update_cognitive_profile()`, `get_personalized_context()`, `semantic_search()`
+- New views: `voice_latency_stats`, `digital_twin_summary`, `vnkg_performance`
+- Extended TypeScript types for all Phase 4 components
 
 ### v1.3.0 (2026-01-25) - Phase 3: Intelligence
 - **Normalized Reward Signals** - Reward computation system for skill trajectory optimization

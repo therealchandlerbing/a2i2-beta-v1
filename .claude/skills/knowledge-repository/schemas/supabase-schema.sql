@@ -1776,6 +1776,616 @@ VALUES ('default', 0.5, 0)
 ON CONFLICT (user_id) DO NOTHING;
 
 -- ============================================================================
+-- PHASE 4: VOICE ORCHESTRATION
+-- ============================================================================
+
+-- Voice-Native Knowledge Graph entries
+CREATE TABLE IF NOT EXISTS arcus_vnkg_entries (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- Content
+    content TEXT NOT NULL,
+    spoken_form TEXT NOT NULL,
+    phonetic_hints TEXT[] DEFAULT '{}',
+    brevity_score FLOAT DEFAULT 0.5 CHECK (brevity_score >= 0 AND brevity_score <= 1),
+
+    -- Indexing
+    keywords TEXT[] DEFAULT '{}',
+    entity_refs TEXT[] DEFAULT '{}',
+    topic_tags TEXT[] DEFAULT '{}',
+
+    -- Usage metrics
+    voice_retrieval_count INTEGER DEFAULT 0,
+    avg_retrieval_latency_ms FLOAT DEFAULT 0,
+    user_satisfaction_score FLOAT DEFAULT 0,
+
+    -- Validity
+    ttl_seconds INTEGER,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_accessed TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Vector embedding for fast retrieval
+    embedding VECTOR(1536),
+
+    metadata JSONB DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_vnkg_keywords ON arcus_vnkg_entries USING GIN(keywords);
+CREATE INDEX IF NOT EXISTS idx_vnkg_entities ON arcus_vnkg_entries USING GIN(entity_refs);
+CREATE INDEX IF NOT EXISTS idx_vnkg_topics ON arcus_vnkg_entries USING GIN(topic_tags);
+CREATE INDEX IF NOT EXISTS idx_vnkg_brevity ON arcus_vnkg_entries(brevity_score DESC);
+CREATE INDEX IF NOT EXISTS idx_vnkg_retrieval_count ON arcus_vnkg_entries(voice_retrieval_count DESC);
+
+-- Voice query log
+CREATE TABLE IF NOT EXISTS arcus_voice_queries (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    query_text TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    session_id TEXT,
+
+    -- Query metadata
+    audio_duration_ms INTEGER,
+    speech_confidence FLOAT DEFAULT 1.0,
+    detected_language TEXT DEFAULT 'en',
+
+    -- Intent classification
+    detected_intent TEXT CHECK (detected_intent IN (
+        'quick_answer', 'recall', 'command', 'clarification', 'conversation', 'complex_query'
+    )),
+    intent_confidence FLOAT,
+
+    -- Response metrics
+    first_chunk_latency_ms INTEGER,
+    total_latency_ms INTEGER,
+    provider_used TEXT,
+    response_mode TEXT CHECK (response_mode IN (
+        'immediate', 'streaming', 'progressive', 'interruptible'
+    )),
+
+    -- Quality metrics
+    skills_used TEXT[] DEFAULT '{}',
+    context_tokens_used INTEGER DEFAULT 0,
+    overall_confidence FLOAT,
+
+    -- Interruption
+    was_interrupted BOOLEAN DEFAULT FALSE,
+    interrupt_point INTEGER,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_voice_queries_user ON arcus_voice_queries(user_id);
+CREATE INDEX IF NOT EXISTS idx_voice_queries_intent ON arcus_voice_queries(detected_intent);
+CREATE INDEX IF NOT EXISTS idx_voice_queries_latency ON arcus_voice_queries(first_chunk_latency_ms);
+CREATE INDEX IF NOT EXISTS idx_voice_queries_time ON arcus_voice_queries(created_at DESC);
+
+-- Proactive preparations cache
+CREATE TABLE IF NOT EXISTS arcus_proactive_preparations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT NOT NULL,
+
+    -- Trigger configuration
+    trigger_patterns TEXT[] NOT NULL,
+    required_entities TEXT[] DEFAULT '{}',
+    required_topic TEXT,
+
+    -- Prepared response
+    prepared_response TEXT NOT NULL,
+    confidence FLOAT DEFAULT 0.5,
+
+    -- Tracking
+    used_count INTEGER DEFAULT 0,
+
+    -- Validity
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+
+    metadata JSONB DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_proactive_user ON arcus_proactive_preparations(user_id);
+CREATE INDEX IF NOT EXISTS idx_proactive_expires ON arcus_proactive_preparations(expires_at);
+CREATE INDEX IF NOT EXISTS idx_proactive_patterns ON arcus_proactive_preparations USING GIN(trigger_patterns);
+
+-- ============================================================================
+-- PHASE 4: DIGITAL TWIN MODELING
+-- ============================================================================
+
+-- Cognitive profiles
+CREATE TABLE IF NOT EXISTS arcus_cognitive_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT UNIQUE NOT NULL,
+
+    -- Cognitive styles (JSON map: style -> weight)
+    cognitive_styles JSONB DEFAULT '{}',
+
+    -- Primary preferences
+    communication_style TEXT DEFAULT 'direct' CHECK (communication_style IN (
+        'direct', 'detailed', 'visual', 'narrative', 'structured'
+    )),
+    time_orientation TEXT DEFAULT 'present_focused' CHECK (time_orientation IN (
+        'past_focused', 'present_focused', 'future_focused'
+    )),
+    risk_tolerance TEXT DEFAULT 'risk_neutral' CHECK (risk_tolerance IN (
+        'risk_averse', 'risk_neutral', 'risk_seeking'
+    )),
+    information_processing TEXT DEFAULT 'sequential' CHECK (information_processing IN (
+        'sequential', 'holistic', 'comparative', 'iterative'
+    )),
+
+    -- Profile quality
+    profile_confidence FLOAT DEFAULT 0.5 CHECK (profile_confidence >= 0 AND profile_confidence <= 1),
+    observations_count INTEGER DEFAULT 0,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    metadata JSONB DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_cognitive_user ON arcus_cognitive_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_cognitive_confidence ON arcus_cognitive_profiles(profile_confidence DESC);
+
+-- Decision patterns
+CREATE TABLE IF NOT EXISTS arcus_decision_patterns (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT NOT NULL,
+    pattern_type TEXT NOT NULL,
+
+    -- Pattern details
+    context_tags TEXT[] DEFAULT '{}',
+    decision_factors TEXT[] DEFAULT '{}',
+    typical_questions TEXT[] DEFAULT '{}',
+    information_needs TEXT[] DEFAULT '{}',
+    decision_timeline TEXT DEFAULT 'moderate',
+
+    -- Outcomes
+    successful_outcomes INTEGER DEFAULT 0,
+    unsuccessful_outcomes INTEGER DEFAULT 0,
+
+    -- Quality
+    confidence FLOAT DEFAULT 0.5 CHECK (confidence >= 0 AND confidence <= 1),
+    times_observed INTEGER DEFAULT 1,
+    last_observed TIMESTAMPTZ DEFAULT NOW(),
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_decision_user ON arcus_decision_patterns(user_id);
+CREATE INDEX IF NOT EXISTS idx_decision_type ON arcus_decision_patterns(pattern_type);
+CREATE INDEX IF NOT EXISTS idx_decision_tags ON arcus_decision_patterns USING GIN(context_tags);
+
+-- Interaction signals
+CREATE TABLE IF NOT EXISTS arcus_interaction_signals (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT NOT NULL,
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Signal classification
+    signal_type TEXT NOT NULL CHECK (signal_type IN (
+        'question', 'correction', 'approval', 'rejection', 'feedback'
+    )),
+
+    -- Context
+    topic TEXT,
+    entities_involved TEXT[] DEFAULT '{}',
+    task_type TEXT,
+
+    -- Signal content
+    content TEXT NOT NULL,
+    sentiment TEXT DEFAULT 'neutral' CHECK (sentiment IN ('positive', 'negative', 'neutral')),
+    urgency TEXT DEFAULT 'medium' CHECK (urgency IN ('low', 'medium', 'high')),
+
+    -- Response tracking
+    response_given TEXT,
+    response_accepted BOOLEAN,
+    correction_made TEXT,
+
+    metadata JSONB DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_signals_user ON arcus_interaction_signals(user_id);
+CREATE INDEX IF NOT EXISTS idx_signals_type ON arcus_interaction_signals(signal_type);
+CREATE INDEX IF NOT EXISTS idx_signals_time ON arcus_interaction_signals(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_signals_entities ON arcus_interaction_signals USING GIN(entities_involved);
+
+-- Anticipated needs
+CREATE TABLE IF NOT EXISTS arcus_anticipated_needs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT NOT NULL,
+
+    -- Need specification
+    need_type TEXT NOT NULL,
+    description TEXT NOT NULL,
+    context_triggers TEXT[] DEFAULT '{}',
+    time_triggers TEXT[] DEFAULT '{}',
+
+    -- Prepared content
+    prepared_content TEXT,
+    preparation_confidence FLOAT DEFAULT 0,
+
+    -- Tracking
+    times_anticipated INTEGER DEFAULT 0,
+    times_fulfilled INTEGER DEFAULT 0,
+    accuracy_rate FLOAT DEFAULT 0,
+
+    -- Validity
+    valid_from TIMESTAMPTZ DEFAULT NOW(),
+    valid_until TIMESTAMPTZ,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_anticipated_user ON arcus_anticipated_needs(user_id);
+CREATE INDEX IF NOT EXISTS idx_anticipated_valid ON arcus_anticipated_needs(valid_until);
+CREATE INDEX IF NOT EXISTS idx_anticipated_triggers ON arcus_anticipated_needs USING GIN(context_triggers);
+
+-- ============================================================================
+-- PHASE 4: VECTOR EMBEDDINGS
+-- ============================================================================
+
+-- Embedding cache
+CREATE TABLE IF NOT EXISTS arcus_embedding_cache (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    text_hash TEXT UNIQUE NOT NULL,  -- Hash of text + model
+
+    -- Embedding data
+    embedding VECTOR(1536),  -- Standard dimension, can vary
+    model TEXT NOT NULL,
+    dimensions INTEGER NOT NULL,
+
+    -- Source info
+    text_length INTEGER,
+    tokens_used INTEGER,
+
+    -- Performance
+    latency_ms INTEGER,
+    cost_usd FLOAT DEFAULT 0,
+
+    -- Validity
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ,
+    access_count INTEGER DEFAULT 0,
+    last_accessed TIMESTAMPTZ DEFAULT NOW(),
+
+    metadata JSONB DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_embedding_hash ON arcus_embedding_cache(text_hash);
+CREATE INDEX IF NOT EXISTS idx_embedding_model ON arcus_embedding_cache(model);
+CREATE INDEX IF NOT EXISTS idx_embedding_expires ON arcus_embedding_cache(expires_at);
+
+-- Search index metadata (for tracking indexed items)
+CREATE TABLE IF NOT EXISTS arcus_search_index (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    source_id TEXT UNIQUE NOT NULL,  -- ID of source item
+    source_type TEXT NOT NULL,        -- episodic, semantic, procedural, graph
+
+    -- Index status
+    indexed_at TIMESTAMPTZ DEFAULT NOW(),
+    embedding_id UUID REFERENCES arcus_embedding_cache(id),
+
+    -- Content summary
+    content_preview TEXT,
+    keywords TEXT[] DEFAULT '{}',
+
+    metadata JSONB DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_search_source ON arcus_search_index(source_id);
+CREATE INDEX IF NOT EXISTS idx_search_type ON arcus_search_index(source_type);
+CREATE INDEX IF NOT EXISTS idx_search_keywords ON arcus_search_index USING GIN(keywords);
+
+-- ============================================================================
+-- PHASE 4: RPC FUNCTIONS
+-- ============================================================================
+
+-- Function: Record voice query and get latency stats
+CREATE OR REPLACE FUNCTION record_voice_query(
+    p_query_text TEXT,
+    p_user_id TEXT,
+    p_detected_intent TEXT,
+    p_first_chunk_latency_ms INTEGER,
+    p_total_latency_ms INTEGER,
+    p_provider_used TEXT,
+    p_skills_used TEXT[],
+    p_was_interrupted BOOLEAN DEFAULT FALSE
+)
+RETURNS TABLE (
+    query_id UUID,
+    avg_latency_24h FLOAT,
+    under_250ms_rate FLOAT
+) AS $$
+DECLARE
+    v_query_id UUID;
+BEGIN
+    -- Insert the query
+    INSERT INTO arcus_voice_queries (
+        query_text, user_id, detected_intent,
+        first_chunk_latency_ms, total_latency_ms,
+        provider_used, skills_used, was_interrupted
+    )
+    VALUES (
+        p_query_text, p_user_id, p_detected_intent,
+        p_first_chunk_latency_ms, p_total_latency_ms,
+        p_provider_used, p_skills_used, p_was_interrupted
+    )
+    RETURNING id INTO v_query_id;
+
+    -- Return stats
+    RETURN QUERY
+    SELECT
+        v_query_id,
+        AVG(vq.first_chunk_latency_ms)::FLOAT,
+        (COUNT(*) FILTER (WHERE vq.first_chunk_latency_ms < 250))::FLOAT / NULLIF(COUNT(*), 0)
+    FROM arcus_voice_queries vq
+    WHERE vq.user_id = p_user_id
+      AND vq.created_at > NOW() - INTERVAL '24 hours';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Update cognitive profile from interaction
+CREATE OR REPLACE FUNCTION update_cognitive_profile(
+    p_user_id TEXT,
+    p_cognitive_styles JSONB,
+    p_communication_style TEXT DEFAULT NULL,
+    p_time_orientation TEXT DEFAULT NULL
+)
+RETURNS arcus_cognitive_profiles AS $$
+DECLARE
+    v_profile arcus_cognitive_profiles;
+    v_current_styles JSONB;
+    v_key TEXT;
+    v_new_val FLOAT;
+    v_old_val FLOAT;
+    v_alpha FLOAT := 0.1;  -- Learning rate
+BEGIN
+    -- Get or create profile
+    INSERT INTO arcus_cognitive_profiles (user_id)
+    VALUES (p_user_id)
+    ON CONFLICT (user_id) DO NOTHING;
+
+    -- Get current profile
+    SELECT * INTO v_profile
+    FROM arcus_cognitive_profiles
+    WHERE user_id = p_user_id;
+
+    -- Update cognitive styles with exponential moving average
+    v_current_styles := COALESCE(v_profile.cognitive_styles, '{}');
+
+    FOR v_key, v_new_val IN SELECT key, value::FLOAT FROM jsonb_each_text(p_cognitive_styles) LOOP
+        v_old_val := COALESCE((v_current_styles->>v_key)::FLOAT, 0.5);
+        v_current_styles := jsonb_set(
+            v_current_styles,
+            ARRAY[v_key],
+            to_jsonb(v_old_val * (1 - v_alpha) + v_new_val * v_alpha)
+        );
+    END LOOP;
+
+    -- Update profile
+    UPDATE arcus_cognitive_profiles
+    SET
+        cognitive_styles = v_current_styles,
+        communication_style = COALESCE(p_communication_style, communication_style),
+        time_orientation = COALESCE(p_time_orientation, time_orientation),
+        observations_count = observations_count + 1,
+        profile_confidence = LEAST(0.95, (observations_count + 1)::FLOAT / (observations_count + 11)),
+        updated_at = NOW()
+    WHERE user_id = p_user_id
+    RETURNING * INTO v_profile;
+
+    RETURN v_profile;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Get personalized context for a user
+CREATE OR REPLACE FUNCTION get_personalized_context(
+    p_user_id TEXT,
+    p_task_type TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+    profile JSONB,
+    recent_patterns JSONB,
+    anticipated_needs JSONB,
+    recommendations TEXT[]
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        -- Profile
+        jsonb_build_object(
+            'cognitive_styles', cp.cognitive_styles,
+            'communication_style', cp.communication_style,
+            'time_orientation', cp.time_orientation,
+            'risk_tolerance', cp.risk_tolerance,
+            'information_processing', cp.information_processing,
+            'confidence', cp.profile_confidence
+        ),
+        -- Recent patterns
+        COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+                'type', dp.pattern_type,
+                'factors', dp.decision_factors,
+                'questions', dp.typical_questions,
+                'info_needs', dp.information_needs,
+                'confidence', dp.confidence
+            ))
+            FROM arcus_decision_patterns dp
+            WHERE dp.user_id = p_user_id
+              AND (p_task_type IS NULL OR p_task_type = ANY(dp.context_tags))
+            ORDER BY dp.confidence DESC
+            LIMIT 3
+        ), '[]'::JSONB),
+        -- Anticipated needs
+        COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+                'type', an.need_type,
+                'description', an.description,
+                'confidence', an.preparation_confidence
+            ))
+            FROM arcus_anticipated_needs an
+            WHERE an.user_id = p_user_id
+              AND (an.valid_until IS NULL OR an.valid_until > NOW())
+            ORDER BY an.accuracy_rate DESC
+            LIMIT 5
+        ), '[]'::JSONB),
+        -- Recommendations based on profile
+        ARRAY(
+            SELECT CASE
+                WHEN cp.communication_style = 'direct' THEN 'Use bullet points'
+                WHEN cp.communication_style = 'detailed' THEN 'Provide comprehensive explanations'
+                WHEN cp.communication_style = 'structured' THEN 'Format as numbered lists'
+                ELSE 'Adapt to context'
+            END
+        )
+    FROM arcus_cognitive_profiles cp
+    WHERE cp.user_id = p_user_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Semantic search with vector similarity
+CREATE OR REPLACE FUNCTION semantic_search(
+    p_query_embedding VECTOR(1536),
+    p_memory_types TEXT[] DEFAULT NULL,
+    p_top_k INTEGER DEFAULT 10,
+    p_min_score FLOAT DEFAULT 0.0
+)
+RETURNS TABLE (
+    id UUID,
+    content TEXT,
+    memory_type TEXT,
+    similarity_score FLOAT,
+    metadata JSONB
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH all_memories AS (
+        -- Episodic memories
+        SELECT
+            em.id,
+            em.summary AS content,
+            'episodic' AS memory_type,
+            1 - (em.embedding <=> p_query_embedding) AS similarity,
+            em.metadata
+        FROM arcus_episodic_memory em
+        WHERE em.embedding IS NOT NULL
+          AND (p_memory_types IS NULL OR 'episodic' = ANY(p_memory_types))
+
+        UNION ALL
+
+        -- Semantic memories
+        SELECT
+            sm.id,
+            sm.statement AS content,
+            'semantic' AS memory_type,
+            1 - (sm.embedding <=> p_query_embedding) AS similarity,
+            sm.metadata
+        FROM arcus_semantic_memory sm
+        WHERE sm.embedding IS NOT NULL
+          AND (p_memory_types IS NULL OR 'semantic' = ANY(p_memory_types))
+
+        UNION ALL
+
+        -- Procedural memories
+        SELECT
+            pm.id,
+            pm.name || ': ' || COALESCE(pm.description, '') AS content,
+            'procedural' AS memory_type,
+            1 - (pm.embedding <=> p_query_embedding) AS similarity,
+            pm.metadata
+        FROM arcus_procedural_memory pm
+        WHERE pm.embedding IS NOT NULL
+          AND (p_memory_types IS NULL OR 'procedural' = ANY(p_memory_types))
+
+        UNION ALL
+
+        -- VNKG entries
+        SELECT
+            ve.id,
+            ve.spoken_form AS content,
+            'vnkg' AS memory_type,
+            1 - (ve.embedding <=> p_query_embedding) AS similarity,
+            ve.metadata
+        FROM arcus_vnkg_entries ve
+        WHERE ve.embedding IS NOT NULL
+          AND (p_memory_types IS NULL OR 'vnkg' = ANY(p_memory_types))
+    )
+    SELECT
+        am.id,
+        am.content,
+        am.memory_type,
+        am.similarity AS similarity_score,
+        am.metadata
+    FROM all_memories am
+    WHERE am.similarity >= p_min_score
+    ORDER BY am.similarity DESC
+    LIMIT p_top_k;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
+-- PHASE 4: VIEWS
+-- ============================================================================
+
+-- View: Voice latency statistics
+CREATE OR REPLACE VIEW voice_latency_stats AS
+SELECT
+    user_id,
+    DATE_TRUNC('hour', created_at) AS hour,
+    COUNT(*) AS query_count,
+    AVG(first_chunk_latency_ms) AS avg_first_chunk_ms,
+    AVG(total_latency_ms) AS avg_total_ms,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY first_chunk_latency_ms) AS p50_latency,
+    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY first_chunk_latency_ms) AS p95_latency,
+    COUNT(*) FILTER (WHERE first_chunk_latency_ms < 250)::FLOAT / NULLIF(COUNT(*), 0) AS under_250ms_rate
+FROM arcus_voice_queries
+WHERE created_at > NOW() - INTERVAL '24 hours'
+GROUP BY user_id, DATE_TRUNC('hour', created_at)
+ORDER BY hour DESC;
+
+-- View: Digital twin summary
+CREATE OR REPLACE VIEW digital_twin_summary AS
+SELECT
+    cp.user_id,
+    cp.cognitive_styles,
+    cp.communication_style,
+    cp.time_orientation,
+    cp.risk_tolerance,
+    cp.profile_confidence,
+    cp.observations_count,
+    (SELECT COUNT(*) FROM arcus_decision_patterns dp WHERE dp.user_id = cp.user_id) AS decision_patterns_count,
+    (SELECT COUNT(*) FROM arcus_interaction_signals is2 WHERE is2.user_id = cp.user_id) AS interaction_signals_count,
+    (SELECT COUNT(*) FROM arcus_anticipated_needs an WHERE an.user_id = cp.user_id AND (an.valid_until IS NULL OR an.valid_until > NOW())) AS active_anticipated_needs,
+    cp.updated_at
+FROM arcus_cognitive_profiles cp
+ORDER BY cp.updated_at DESC;
+
+-- View: VNKG performance
+CREATE OR REPLACE VIEW vnkg_performance AS
+SELECT
+    COUNT(*) AS total_entries,
+    AVG(brevity_score) AS avg_brevity_score,
+    SUM(voice_retrieval_count) AS total_retrievals,
+    AVG(avg_retrieval_latency_ms) AS avg_latency,
+    AVG(user_satisfaction_score) AS avg_satisfaction,
+    COUNT(DISTINCT unnest(keywords)) AS unique_keywords,
+    COUNT(DISTINCT unnest(entity_refs)) AS unique_entities
+FROM arcus_vnkg_entries
+WHERE created_at > NOW() - INTERVAL '30 days';
+
+-- ============================================================================
+-- PHASE 4: SEED DATA
+-- ============================================================================
+
+-- Insert default cognitive profile
+INSERT INTO arcus_cognitive_profiles (user_id, cognitive_styles, communication_style)
+VALUES ('default', '{"analytical": 0.5, "intuitive": 0.5}', 'direct')
+ON CONFLICT (user_id) DO NOTHING;
+
+-- ============================================================================
 -- COMPLETION
 -- ============================================================================
 
@@ -1783,4 +2393,4 @@ ON CONFLICT (user_id) DO NOTHING;
 -- GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 -- GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
-COMMENT ON SCHEMA public IS 'Arcus Knowledge Repository v1.2.0 - Phase 3 Schema (Reward Signals + Trust Engine + Data Synthesis) - Updated 2026-01-25';
+COMMENT ON SCHEMA public IS 'Arcus Knowledge Repository v1.4.0 - Phase 4 Schema (Voice Orchestration + Digital Twin + Embeddings) - Updated 2026-01-25';
