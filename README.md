@@ -442,8 +442,9 @@ A2I2 introduces genuinely novel concepts that differentiate it from existing AI 
 │   ┌───────────────────────────────▼─────────────────────────────────────────┐   │
 │   │                       💾 STORAGE LAYER                                  │   │
 │   │    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                │   │
-│   │    │  Supabase   │    │   Vector    │    │    Git      │                │   │
-│   │    │ (Postgres)  │    │   Store     │    │ (Versioned) │                │   │
+│   │    │ Neon/       │    │   Vector    │    │    Git      │                │   │
+│   │    │ Supabase    │    │   Store     │    │ (Versioned) │                │   │
+│   │    │ (Postgres)  │    │ (pgvector)  │    │             │                │   │
 │   │    └─────────────┘    └─────────────┘    └─────────────┘                │   │
 │   └─────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                 │
@@ -1062,12 +1063,13 @@ A2I2 connects to your existing tools and learns from the data flowing through th
 │   ════════════                   ═══════                     ═════              │
 │                                                                                  │
 │   ┌─────────┐  ┌─────────┐       ┌─────────┐               ┌─────────┐         │
-│   │ Google  │  │ Notion  │       │Supabase │               │PersonaPx│         │
-│   │  Drive  │  │         │       │         │               │         │         │
+│   │ Google  │  │ Notion  │       │  Neon/  │               │PersonaPx│         │
+│   │  Drive  │  │         │       │Supabase │               │         │         │
 │   └────┬────┘  └────┬────┘       └────┬────┘               └────┬────┘         │
 │        │            │                  │                         │              │
 │        │  Docs      │  Wiki            │  Postgres +             │  Real-time   │
 │        │  indexed   │  synced          │  pgvector               │  voice I/O   │
+│        │                               │  (Neon/Supabase)        │              │
 │        │                                                                        │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -1166,12 +1168,61 @@ Use natural language—no special commands needed:
 | "Sarah works at TechCorp as CIO" | Creates relationship in knowledge graph |
 | "Create a proposal for DataFlow" | Triggers proposal workflow with context |
 
-### Adding Persistent Storage (15 minutes)
+### Adding Persistent Storage (45-60 minutes)
 
 For cross-session memory that survives beyond `CLAUDE.memory.md`:
 
+> **Note**: These options involve creating a new Next.js application with API routes.
+> The time estimate assumes familiarity with Next.js and PostgreSQL.
+
 <details>
-<summary><b>Supabase Setup Instructions</b></summary>
+<summary><b>Option A: Vercel + Neon (Recommended)</b></summary>
+
+Deploy A2I2 as a web application with serverless PostgreSQL:
+
+1. **Create a Neon Project** at [neon.tech](https://neon.tech)
+   ```sql
+   -- Enable required extensions
+   CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+   CREATE EXTENSION IF NOT EXISTS "vector";
+   ```
+
+2. **Run the Schema SQL**
+   ```sql
+   -- Copy contents of:
+   -- .claude/skills/knowledge-repository/schemas/supabase-schema.sql
+   -- (100% compatible with Neon)
+   ```
+
+3. **Deploy to Vercel**
+   ```bash
+   # Install Vercel CLI
+   npm install -g vercel
+
+   # Deploy
+   vercel --prod
+   ```
+
+4. **Configure Environment**
+   ```bash
+   # In Vercel Dashboard → Settings → Environment Variables
+   DATABASE_URL="postgres://user:pass@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require"
+   ```
+
+**Benefits:**
+- Serverless scaling (pay for what you use)
+- Database branching for dev/staging/prod
+- Web dashboard templates (build your own UI with provided examples)
+- REST API endpoints for external integrations
+
+> **Security Note**: API endpoints require authentication before production deployment.
+
+See **[VERCEL-NEON-INTEGRATION.md](docs/VERCEL-NEON-INTEGRATION.md)** for complete setup guide.
+
+</details>
+
+<details>
+<summary><b>Option B: Supabase (Alternative)</b></summary>
 
 1. **Create a Supabase Project** at [supabase.com](https://supabase.com)
 
@@ -1319,6 +1370,7 @@ a2i2-beta-v1/
 |:---------|:------------|:---------|
 | [**SKILL.md**](.claude/skills/knowledge-repository/SKILL.md) | Core operational logic | Developers |
 | [**QUICK-START.md**](.claude/skills/knowledge-repository/QUICK-START.md) | Fast reference guide | Everyone |
+| [**VERCEL-NEON-INTEGRATION.md**](docs/VERCEL-NEON-INTEGRATION.md) | Vercel + Neon deployment guide | Developers |
 | [**VISION.md**](.claude/skills/knowledge-repository/docs/VISION.md) | R2-D2 / Enterprise vision | Stakeholders |
 | [**ARCHITECTURE.md**](.claude/skills/knowledge-repository/docs/ARCHITECTURE.md) | Technical architecture | Developers |
 | [**STRATEGIC-REVIEW.md**](.claude/skills/knowledge-repository/docs/STRATEGIC-REVIEW.md) | Novel concepts & IP | Leadership |
@@ -1407,27 +1459,43 @@ Vision        ░░░░░░░░░░░░░░░░░░░░░░
 | Layer | Technology | Rationale |
 |:------|:-----------|:----------|
 | **LLM** | Claude (Anthropic) | Extended thinking, tool use |
-| **Database** | Supabase (PostgreSQL) | Real-time, vectors, RLS |
-| **Vector Store** | pgvector (via Supabase) | Semantic search |
+| **Hosting** | Vercel | Serverless, edge network, instant deploys |
+| **Database** | Neon or Supabase (PostgreSQL) | Serverless Postgres, branching, pgvector |
+| **Vector Store** | pgvector | Semantic search, native Postgres |
 | **Voice** | NVIDIA PersonaPlex | Full-duplex, 170ms latency |
 | **Voice STT (alt)** | Deepgram | Low latency, real-time |
 | **Voice TTS (alt)** | ElevenLabs | Natural voices, cloning |
-| **Framework** | Next.js 14 | Dashboard integration |
+| **Framework** | Next.js 14 (App Router) | Dashboard, API routes, React Server Components |
 | **Automation** | Zapier + Hooks | Integration layer |
+
+### Deployment Options
+
+| Option | Database | Hosting | Best For |
+|:-------|:---------|:--------|:---------|
+| **Vercel + Neon** | Neon PostgreSQL | Vercel | Production web apps, serverless |
+| **Supabase** | Supabase PostgreSQL | Self-managed | Real-time features, existing Supabase users |
+| **CLI Only** | CLAUDE.memory.md | Local | Development, personal use |
 
 ### Infrastructure Requirements
 
-**Phase 1-2 (Foundation + Intelligence)**
-- Supabase Pro plan ($25/month) for pgvector
-- No additional infrastructure needed
+**Development (Free Tier)**
+- Neon: Free tier (0.5 GB storage, 190 compute hours)
+- Vercel: Hobby plan (free)
+- Total: $0/month
 
-**Phase 3 (Voice)**
+**Production (Recommended)**
+- Neon: Launch plan ($19/month) - 10GB storage, autoscaling
+- Vercel: Pro plan ($20/month) - Team features, analytics
+- Total: $39/month
+
+**With Voice (Phase 3+)**
 - GPU server for PersonaPlex (~$0.75-1.00/hr on Lambda Labs or AWS)
 - Or: Cloud GPU instance (AWS g5.xlarge, Lambda Labs A10)
 - Estimated: $100-300/month for moderate usage
 
-**Phase 4-5 (Autonomy + Chief of Staff)**
-- Dedicated vector search (if scale requires)
+**Enterprise (Phase 4-5)**
+- Neon: Scale plan ($69+/month)
+- Vercel: Enterprise or self-hosted
 - Background job processing (Vercel Cron or dedicated)
 - Monitoring/observability (Datadog, Sentry)
 - Estimated: $200-500/month
@@ -1553,7 +1621,8 @@ Enterprise multi-tenant support is on the roadmap for Q2 2026.
 <summary><b>What integrations are supported?</b></summary>
 
 **Currently supported:**
-- Supabase (database)
+- Neon or Supabase (database)
+- Vercel (hosting/deployment)
 - Google Drive (documents)
 - Git/GitHub (version control)
 
@@ -1566,6 +1635,28 @@ Enterprise multi-tenant support is on the roadmap for Q2 2026.
 - CRM systems (Salesforce, HubSpot)
 
 A2I2 also supports webhooks and Zapier for custom integrations.
+
+</details>
+
+<details>
+<summary><b>Why Vercel + Neon instead of Supabase?</b></summary>
+
+Both are excellent options. Here's why you might choose one over the other:
+
+**Choose Vercel + Neon when:**
+- You want serverless scaling (scale to zero)
+- You need database branching for dev/staging/prod
+- You're building a web frontend for A2I2
+- You want native Vercel integration
+- You prefer pure PostgreSQL without proprietary features
+
+**Choose Supabase when:**
+- You need real-time subscriptions
+- You want built-in authentication (auth.uid())
+- You prefer a single platform for database + auth + storage
+- You're already invested in the Supabase ecosystem
+
+**Migration is easy:** The schema is 100% PostgreSQL-compatible, so you can switch between them with minimal code changes.
 
 </details>
 
