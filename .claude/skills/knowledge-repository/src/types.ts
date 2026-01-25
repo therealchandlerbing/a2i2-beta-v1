@@ -379,6 +379,14 @@ export interface BoundaryCheck {
   violations: string[];
 }
 
+export interface ToolInvocation {
+  name: string;
+  latency_ms?: number;
+  cost?: number;
+  success: boolean;
+  params_hash?: string;
+}
+
 export interface AutonomyAuditEntry {
   id: UUID;
   action_type: string;
@@ -391,6 +399,18 @@ export interface AutonomyAuditEntry {
   boundary_check: BoundaryCheck;
   outcome?: ActionOutcome;
   outcome_details?: string;
+
+  // Efficiency tracking (ToolOrchestra-inspired)
+  tokens_input?: number;
+  tokens_output?: number;
+  tokens_thinking?: number;
+  estimated_cost_usd?: number;
+  latency_ms?: number;
+  model_used?: string;
+  tools_invoked?: ToolInvocation[];
+  thinking_level?: 'minimal' | 'low' | 'medium' | 'high';
+  efficiency_score?: number;
+
   human_approval_required: boolean;
   human_approved?: boolean;
   human_override: boolean;
@@ -579,4 +599,171 @@ export interface BulkOperationResult {
     index: number;
     error: string;
   }>;
+}
+
+// ============================================================================
+// MODEL/TOOL PATTERNS (ToolOrchestra-inspired)
+// ============================================================================
+
+export type TaskComplexity = 'low' | 'medium' | 'high';
+
+export type PatternOutcome = 'success' | 'partial' | 'failure';
+
+export interface ModelPattern {
+  id: UUID;
+  task_context: string;
+  task_complexity: TaskComplexity;
+  model_used: string;
+  tools_sequence: ToolInvocation[];
+  outcome: PatternOutcome;
+  accuracy_score?: number;
+  total_cost_usd?: number;
+  total_latency_ms?: number;
+  tokens_used?: number;
+  user_preference_context?: string;
+  usage_count: number;
+  success_count: number;
+  failure_count: number;
+  success_rate: number;
+  confidence: ConfidenceLevel;
+  source: KnowledgeSource;
+  created_at: string;
+  updated_at: string;
+  last_used: string;
+  metadata: Record<string, unknown>;
+  embedding?: number[];
+}
+
+export interface ModelPatternInput {
+  task_context: string;
+  task_complexity?: TaskComplexity;
+  model_used: string;
+  tools_sequence?: ToolInvocation[];
+  outcome: PatternOutcome;
+  accuracy_score?: number;
+  total_cost_usd?: number;
+  total_latency_ms?: number;
+  tokens_used?: number;
+  user_preference_context?: string;
+  confidence?: ConfidenceLevel;
+  source?: KnowledgeSource;
+  metadata?: Record<string, unknown>;
+}
+
+// ============================================================================
+// USER PREFERENCE VECTORS (ToolOrchestra-inspired)
+// ============================================================================
+
+export interface ModelPreferences {
+  'claude-opus'?: number;
+  'claude-sonnet'?: number;
+  'claude-haiku'?: number;
+  'gemini-3-pro'?: number;
+  'gemini-3-flash'?: number;
+  'gemini-2.5-pro'?: number;
+  'gemini-2.5-flash'?: number;
+  'personaplex'?: number;
+  [key: string]: number | undefined;
+}
+
+export interface ToolPreferences {
+  web_search?: number;
+  local_search?: number;
+  code_execution?: number;
+  deep_research?: number;
+  [key: string]: number | undefined;
+}
+
+export interface SkillPreferences {
+  knowledge_repository?: number;
+  research?: number;
+  code_analysis?: number;
+  [key: string]: number | undefined;
+}
+
+export interface UserPreferenceVector {
+  id: UUID;
+  user_id: string;
+  context_name: string;
+
+  // Objective weights (should sum to 1.0)
+  accuracy_weight: number;
+  cost_weight: number;
+  latency_weight: number;
+
+  // Preferences (0.0 = avoid, 1.0 = strongly prefer)
+  model_preferences: ModelPreferences;
+  tool_preferences: ToolPreferences;
+  skill_preferences: SkillPreferences;
+
+  // Context-specific overrides
+  overrides: Record<string, Record<string, number>>;
+
+  // Learning from feedback
+  feedback_count: number;
+  last_feedback?: string;
+
+  is_active: boolean;
+  source: KnowledgeSource;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface UserPreferenceVectorInput {
+  user_id?: string;
+  context_name: string;
+  accuracy_weight?: number;
+  cost_weight?: number;
+  latency_weight?: number;
+  model_preferences?: ModelPreferences;
+  tool_preferences?: ToolPreferences;
+  skill_preferences?: SkillPreferences;
+  overrides?: Record<string, Record<string, number>>;
+  source?: KnowledgeSource;
+  metadata?: Record<string, unknown>;
+}
+
+// ============================================================================
+// ORCHESTRATION TYPES
+// ============================================================================
+
+export interface OrchestrationDecision {
+  selected_model: string;
+  selected_tools: string[];
+  thinking_level: 'minimal' | 'low' | 'medium' | 'high';
+  reasoning: string;
+  estimated_cost: number;
+  estimated_latency_ms: number;
+  confidence: ConfidenceLevel;
+  matched_pattern?: UUID;
+}
+
+export interface OrchestrationRequest {
+  task_description: string;
+  task_context?: string;
+  complexity_hint?: TaskComplexity;
+  user_preference_context?: string;
+  max_cost_usd?: number;
+  max_latency_ms?: number;
+  require_tools?: string[];
+  exclude_tools?: string[];
+}
+
+export interface EfficiencyReport {
+  period: {
+    start: string;
+    end: string;
+  };
+  total_requests: number;
+  total_cost_usd: number;
+  total_tokens: number;
+  avg_latency_ms: number;
+  model_breakdown: Record<string, {
+    count: number;
+    cost: number;
+    success_rate: number;
+    avg_latency_ms: number;
+  }>;
+  recommendations: string[];
 }

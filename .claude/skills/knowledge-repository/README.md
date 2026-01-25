@@ -1,20 +1,35 @@
 # Arcus Knowledge Repository
 
-**Transform Claude from a stateless assistant into a learning, remembering AI companion.**
+**Transform Claude from a stateless assistant into a learning, remembering, orchestrating AI companion.**
 
 ---
 
 ## Overview
 
-The Arcus Knowledge Repository is a persistent memory system that enables Claude to:
+The Arcus Knowledge Repository is a persistent memory and orchestration system that enables Claude to:
 
 - **Remember** everything across sessions
 - **Learn** from every interaction
 - **Build relationships** between people, organizations, and concepts
 - **Anticipate needs** based on patterns
 - **Act with increasing autonomy** as trust is earned
+- **Orchestrate** multiple models and tools efficiently *(NEW)*
 
-This is the foundation for building an AI companion like R2-D2 or the Enterprise computer - one that knows your organization deeply and grows more capable over time.
+This is the foundation for building an AI companion like R2-D2 or the Enterprise computer - one that knows your organization deeply, coordinates intelligently, and grows more capable over time.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                    🧠 ARCUS KNOWLEDGE REPOSITORY                             │
+│                                                                              │
+│         Memory Foundation  ──►  Learn from every interaction                 │
+│         Model Orchestration ──►  Route to optimal models/tools               │
+│         Trust Progression  ──►  Earn autonomy over time                      │
+│                                                                              │
+│                   "The AI companion that remembers and improves"             │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ## Quick Start
 
@@ -104,6 +119,110 @@ Claude will automatically:
 - Projects and their associations
 - Influence and decision networks
 
+### Model/Tool Patterns *(NEW - ToolOrchestra-inspired)*
+- Which models work best for which task types
+- Successful tool sequences and combinations
+- Cost/latency optimization over time
+- Cross-session learning from outcomes
+
+---
+
+## Model Orchestration *(NEW)*
+
+Inspired by NVIDIA's [ToolOrchestra](https://github.com/NVlabs/ToolOrchestra), the knowledge repository now includes intelligent model routing.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        MODEL ORCHESTRATION FLOW                              │
+│                                                                              │
+│   ┌─────────────┐      ┌──────────────────┐      ┌─────────────────┐        │
+│   │   Request   │ ──►  │   Model Router   │ ──►  │  Selected Model │        │
+│   └─────────────┘      └──────────────────┘      └─────────────────┘        │
+│                               │                                              │
+│                   ┌───────────┼───────────┐                                  │
+│                   ▼           ▼           ▼                                  │
+│            ┌──────────┐ ┌──────────┐ ┌──────────┐                           │
+│            │ User     │ │Historical│ │   Cost/  │                           │
+│            │Preference│ │ Patterns │ │ Latency  │                           │
+│            │ Vectors  │ │          │ │Constraints│                           │
+│            └──────────┘ └──────────┘ └──────────┘                           │
+│                                                                              │
+│   AVAILABLE MODELS:                                                          │
+│   ┌────────────┬────────────┬────────────┬────────────┬────────────┐        │
+│   │ Claude     │ Gemini 3   │ Gemini 3   │ PersonaPlex│ Deep       │        │
+│   │ Opus/Sonnet│ Pro        │ Flash      │ (Voice)    │ Research   │        │
+│   └────────────┴────────────┴────────────┴────────────┴────────────┘        │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | Description |
+|---------|-------------|
+| **User Preference Vectors** | Numerical preferences that modify routing (accuracy vs cost vs latency) |
+| **Model Patterns** | Learn which models succeed for which task types |
+| **Efficiency Tracking** | Track cost, latency, tokens for every action |
+| **Outcome Learning** | Improve routing based on historical success rates |
+
+### Quick Example
+
+```python
+from model_router import ModelRouter
+
+router = ModelRouter()
+
+# Route to best model for a task
+decision = router.route(
+    task="Analyze this financial document",
+    context="document_analysis",
+    preference_context="cost_sensitive"  # Use cost-optimized preferences
+)
+
+print(f"Model: {decision.model_id}")        # gemini-3-flash
+print(f"Thinking: {decision.thinking_level}")  # medium
+print(f"Cost: ${decision.estimated_cost:.4f}") # $0.0012
+
+# After task completes, record outcome
+router.record_outcome(
+    decision=decision,
+    success=True,
+    actual_cost=0.0015,
+    actual_latency=800
+)  # This improves future routing!
+```
+
+### Preference Vectors
+
+Customize routing behavior per user and context:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              USER PREFERENCE VECTOR                          │
+│                                                              │
+│   Objective Weights (sum to 1.0):                            │
+│   ┌─────────────────────────────────────────────────────┐   │
+│   │  Accuracy: 0.5  │  Cost: 0.3  │  Latency: 0.2     │   │
+│   └─────────────────────────────────────────────────────┘   │
+│                                                              │
+│   Model Preferences (0.0 = avoid, 1.0 = prefer):            │
+│   ┌─────────────────────────────────────────────────────┐   │
+│   │  claude-opus: 0.3   (avoid expensive)              │   │
+│   │  gemini-3-flash: 0.8 (prefer balanced)             │   │
+│   │  personaplex: 0.9   (strongly prefer for voice)    │   │
+│   └─────────────────────────────────────────────────────┘   │
+│                                                              │
+│   Context Overrides:                                         │
+│   ┌─────────────────────────────────────────────────────┐   │
+│   │  confidential_data: {web_search: 0.0}              │   │
+│   │  time_critical: {latency_weight: 0.7}              │   │
+│   └─────────────────────────────────────────────────────┘   │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Core Operations
 
 ### LEARN - Capture Knowledge
@@ -158,24 +277,28 @@ Periodic synthesis:
 
 ```
 .claude/skills/knowledge-repository/
-├── SKILL.md              # Claude's operational instructions
-├── README.md             # This file
-├── QUICK-START.md        # Fast reference guide
+├── SKILL.md                 # Claude's operational instructions
+├── README.md                # This file
+├── QUICK-START.md           # Fast reference guide
+├── INDEX.md                 # Navigation guide
 │
 ├── docs/
-│   ├── ARCHITECTURE.md   # Complete technical architecture
-│   └── VISION.md         # Long-term vision document
+│   ├── ARCHITECTURE.md      # Complete technical architecture
+│   ├── VISION.md            # Long-term vision document
+│   └── TOOLORCHESTRA-REVIEW.md  # ToolOrchestra analysis & enhancements
 │
 ├── schemas/
-│   └── supabase-schema.sql  # Database schema
+│   └── supabase-schema.sql  # Database schema (incl. orchestration tables)
 │
 ├── src/
-│   └── types.ts          # TypeScript type definitions
+│   ├── types.ts             # TypeScript type definitions
+│   ├── knowledge_operations.py  # Core Python operations
+│   └── model_router.py      # Intelligent model routing (NEW)
 │
 ├── config/
 │   └── memory-template.md   # Template for CLAUDE.memory.md
 │
-└── modules/              # Future: modular extensions
+└── modules/                 # Future: modular extensions
     ├── client-intelligence/
     ├── project-memory/
     └── team-preferences/
@@ -221,20 +344,27 @@ Currently starting at Level 0, building trust through successful interactions.
 
 ## Future Capabilities
 
+### Phase 1.5: Orchestration Enhancements (In Progress)
+- RL-based routing optimization
+- Real-time constraint adaptation
+- A/B testing framework for models
+- Complexity classifier integration
+
 ### Phase 2: Intelligence (Planned)
 - Vector embeddings for semantic search
 - Pattern detection and recommendations
 - Automatic context injection
 
 ### Phase 3: Voice (Planned)
-- Real-time voice interface
+- Real-time voice interface via PersonaPlex
 - Voice memory (transcription + context)
-- Meeting integration
+- Meeting integration with knowledge extraction
 
 ### Phase 4: Autonomy (Planned)
 - Pre-approved action categories
 - Proactive task execution
 - Self-correction and learning
+- Federated organizational intelligence
 
 ## Configuration
 
@@ -292,6 +422,16 @@ Located at repository root, this file:
 - Ensure feedback is being provided
 
 ## Version History
+
+### v1.1.0 (2026-01-25)
+- **Model Orchestration** - Intelligent routing inspired by NVIDIA ToolOrchestra
+- **User Preference Vectors** - Customizable accuracy/cost/latency weights
+- **Model Patterns** - Cross-session learning from outcomes
+- **Efficiency Tracking** - Cost, latency, and token tracking per request
+- New `model_router.py` for intelligent model selection
+- New `knowledge_operations.py` with orchestration methods
+- Enhanced Supabase schema with `arcus_model_patterns` and `arcus_user_preference_vectors` tables
+- ToolOrchestra review document with enhancement roadmap
 
 ### v1.0.0 (2026-01-24)
 - Initial architecture design
