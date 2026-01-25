@@ -950,6 +950,465 @@ INSERT INTO arcus_entities (
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
+-- PHASE 2: SKILL REGISTRY
+-- Tracks registered skills and their capabilities
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS arcus_skills (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- Skill identification
+    name TEXT UNIQUE NOT NULL,
+    description TEXT,
+    version TEXT DEFAULT '1.0.0',
+
+    -- Classification
+    category TEXT NOT NULL CHECK (category IN (
+        'knowledge',       -- Knowledge operations
+        'research',        -- Research and information gathering
+        'code',           -- Code analysis and generation
+        'communication',  -- Drafting and formatting
+        'integration',    -- External service integration
+        'analysis',       -- Data and document analysis
+        'voice'           -- Voice-optimized operations
+    )),
+    status TEXT DEFAULT 'active' CHECK (status IN (
+        'active',
+        'deprecated',
+        'experimental',
+        'disabled'
+    )),
+
+    -- Capabilities (array of capability names or full objects)
+    capabilities JSONB DEFAULT '[]',
+    -- Example: [{"name": "recall", "description": "...", "estimated_latency_ms": 1000}]
+
+    -- Context requirements
+    required_context TEXT[] DEFAULT '{}',     -- Must have these context types
+    optional_context TEXT[] DEFAULT '{}',     -- Nice to have
+
+    -- Model preferences
+    preferred_models TEXT[] DEFAULT '{}',     -- e.g., ['claude-sonnet', 'gemini-3-flash']
+    excluded_models TEXT[] DEFAULT '{}',      -- Models to never use
+    min_context_window INTEGER DEFAULT 8000,  -- Minimum context window required
+
+    -- Execution characteristics
+    avg_latency_ms INTEGER DEFAULT 1000,
+    avg_cost_usd DECIMAL(10, 6) DEFAULT 0.001,
+    max_retries INTEGER DEFAULT 2,
+    timeout_ms INTEGER DEFAULT 30000,
+
+    -- Dependencies
+    depends_on TEXT[] DEFAULT '{}',           -- Other skills this depends on
+    conflicts_with TEXT[] DEFAULT '{}',       -- Skills that can't run together
+
+    -- Usage tracking
+    usage_count INTEGER DEFAULT 0,
+    success_count INTEGER DEFAULT 0,
+    failure_count INTEGER DEFAULT 0,
+    success_rate FLOAT GENERATED ALWAYS AS (
+        CASE WHEN usage_count > 0 THEN success_count::FLOAT / usage_count ELSE 0 END
+    ) STORED,
+    last_used TIMESTAMPTZ,
+
+    -- Tags and metadata
+    tags TEXT[] DEFAULT '{}',
+    metadata JSONB DEFAULT '{}',
+
+    -- Source
+    source JSONB NOT NULL DEFAULT '{}',
+
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for skills
+CREATE INDEX IF NOT EXISTS idx_skills_name ON arcus_skills(name);
+CREATE INDEX IF NOT EXISTS idx_skills_category ON arcus_skills(category);
+CREATE INDEX IF NOT EXISTS idx_skills_status ON arcus_skills(status);
+CREATE INDEX IF NOT EXISTS idx_skills_tags ON arcus_skills USING GIN(tags);
+CREATE INDEX IF NOT EXISTS idx_skills_capabilities ON arcus_skills USING GIN(capabilities);
+
+COMMENT ON TABLE arcus_skills IS 'Phase 2: Registered skills and their capabilities';
+
+-- ============================================================================
+-- PHASE 2: SKILL EXECUTIONS
+-- Tracks individual skill executions for learning and analysis
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS arcus_skill_executions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    execution_id TEXT UNIQUE NOT NULL,
+
+    -- Skill reference
+    skill_id UUID REFERENCES arcus_skills(id) ON DELETE SET NULL,
+    skill_name TEXT NOT NULL,
+    capability TEXT NOT NULL,
+
+    -- Execution status
+    status TEXT NOT NULL CHECK (status IN (
+        'pending',
+        'running',
+        'completed',
+        'failed',
+        'cancelled',
+        'timeout'
+    )),
+
+    -- Input/Output
+    inputs JSONB DEFAULT '{}',
+    output JSONB,
+    error TEXT,
+
+    -- Performance metrics
+    latency_ms INTEGER DEFAULT 0,
+    tokens_input INTEGER DEFAULT 0,
+    tokens_output INTEGER DEFAULT 0,
+    tokens_thinking INTEGER DEFAULT 0,
+    tokens_total INTEGER GENERATED ALWAYS AS (tokens_input + tokens_output + tokens_thinking) STORED,
+    cost_usd DECIMAL(10, 6) DEFAULT 0,
+
+    -- Model info
+    model_used TEXT,
+    thinking_level TEXT,
+    fallback_used BOOLEAN DEFAULT FALSE,
+
+    -- Context info
+    context_tokens INTEGER DEFAULT 0,
+    context_sources TEXT[] DEFAULT '{}',
+
+    -- User/session tracking
+    user_id TEXT DEFAULT 'default',
+    session_id TEXT,
+    orchestration_id TEXT,              -- Link to orchestration run
+
+    -- Timestamps
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Metadata
+    metadata JSONB DEFAULT '{}'
+);
+
+-- Indexes for skill executions
+CREATE INDEX IF NOT EXISTS idx_skill_exec_skill ON arcus_skill_executions(skill_name);
+CREATE INDEX IF NOT EXISTS idx_skill_exec_status ON arcus_skill_executions(status);
+CREATE INDEX IF NOT EXISTS idx_skill_exec_user ON arcus_skill_executions(user_id);
+CREATE INDEX IF NOT EXISTS idx_skill_exec_session ON arcus_skill_executions(session_id);
+CREATE INDEX IF NOT EXISTS idx_skill_exec_orchestration ON arcus_skill_executions(orchestration_id);
+CREATE INDEX IF NOT EXISTS idx_skill_exec_model ON arcus_skill_executions(model_used);
+CREATE INDEX IF NOT EXISTS idx_skill_exec_created ON arcus_skill_executions(created_at DESC);
+
+COMMENT ON TABLE arcus_skill_executions IS 'Phase 2: Individual skill execution tracking';
+
+-- ============================================================================
+-- PHASE 2: ORCHESTRATION RUNS
+-- Tracks multi-skill orchestration executions
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS arcus_orchestration_runs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    plan_id TEXT UNIQUE NOT NULL,
+
+    -- Task description
+    task_description TEXT NOT NULL,
+    task_context TEXT,
+    capabilities_requested TEXT[] DEFAULT '{}',
+
+    -- Status
+    status TEXT NOT NULL CHECK (status IN (
+        'planning',
+        'running',
+        'completed',
+        'failed',
+        'cancelled'
+    )),
+
+    -- Plan details
+    plan_steps JSONB DEFAULT '[]',            -- Array of planned steps
+    skills_used TEXT[] DEFAULT '{}',          -- Skills that were executed
+
+    -- Aggregated metrics
+    total_latency_ms INTEGER DEFAULT 0,
+    total_tokens_used INTEGER DEFAULT 0,
+    total_cost_usd DECIMAL(10, 6) DEFAULT 0,
+    skills_executed INTEGER DEFAULT 0,
+    skills_succeeded INTEGER DEFAULT 0,
+    skills_failed INTEGER DEFAULT 0,
+
+    -- Context assembly info
+    context_budget_total INTEGER,
+    context_budget_used INTEGER,
+    context_allocation JSONB,                 -- Budget allocation by memory type
+    context_coverage JSONB,                   -- Coverage achieved by type
+
+    -- Model routing
+    primary_model TEXT,
+    primary_model_confidence FLOAT,
+    fallback_model TEXT,
+
+    -- Final output
+    final_output JSONB,
+
+    -- User/session tracking
+    user_id TEXT DEFAULT 'default',
+    session_id TEXT,
+
+    -- Timestamps
+    started_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ,
+
+    -- Metadata
+    metadata JSONB DEFAULT '{}'
+);
+
+-- Indexes for orchestration runs
+CREATE INDEX IF NOT EXISTS idx_orch_status ON arcus_orchestration_runs(status);
+CREATE INDEX IF NOT EXISTS idx_orch_user ON arcus_orchestration_runs(user_id);
+CREATE INDEX IF NOT EXISTS idx_orch_session ON arcus_orchestration_runs(session_id);
+CREATE INDEX IF NOT EXISTS idx_orch_started ON arcus_orchestration_runs(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orch_context ON arcus_orchestration_runs(task_context);
+CREATE INDEX IF NOT EXISTS idx_orch_skills ON arcus_orchestration_runs USING GIN(skills_used);
+
+COMMENT ON TABLE arcus_orchestration_runs IS 'Phase 2: Multi-skill orchestration tracking';
+
+-- ============================================================================
+-- PHASE 2: CONTEXT BUDGET LOGS
+-- Tracks context budget allocations for analysis and optimization
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS arcus_context_budget_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- Reference to orchestration
+    orchestration_id TEXT REFERENCES arcus_orchestration_runs(plan_id) ON DELETE CASCADE,
+    execution_id TEXT,
+
+    -- Model context limits
+    model_id TEXT NOT NULL,
+    model_context_limit INTEGER NOT NULL,
+
+    -- Budget breakdown
+    total_available INTEGER NOT NULL,
+    reserved_for_prompt INTEGER DEFAULT 0,
+    reserved_for_response INTEGER DEFAULT 0,
+    reserved_for_overhead INTEGER DEFAULT 0,
+    available_for_context INTEGER NOT NULL,
+
+    -- Allocation by memory type
+    allocation_episodic INTEGER DEFAULT 0,
+    allocation_semantic INTEGER DEFAULT 0,
+    allocation_procedural INTEGER DEFAULT 0,
+    allocation_graph INTEGER DEFAULT 0,
+
+    -- Actual usage
+    used_episodic INTEGER DEFAULT 0,
+    used_semantic INTEGER DEFAULT 0,
+    used_procedural INTEGER DEFAULT 0,
+    used_graph INTEGER DEFAULT 0,
+    total_used INTEGER DEFAULT 0,
+
+    -- Items selected
+    items_episodic INTEGER DEFAULT 0,
+    items_semantic INTEGER DEFAULT 0,
+    items_procedural INTEGER DEFAULT 0,
+    items_graph INTEGER DEFAULT 0,
+    items_dropped INTEGER DEFAULT 0,
+
+    -- Efficiency metrics
+    utilization_rate FLOAT GENERATED ALWAYS AS (
+        CASE WHEN available_for_context > 0 THEN total_used::FLOAT / available_for_context ELSE 0 END
+    ) STORED,
+
+    -- Strategy used
+    ranking_strategy TEXT,
+    packing_strategy TEXT,
+
+    -- Query used for relevance ranking
+    query_text TEXT,
+
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Metadata
+    metadata JSONB DEFAULT '{}'
+);
+
+-- Indexes for context budget logs
+CREATE INDEX IF NOT EXISTS idx_budget_orch ON arcus_context_budget_logs(orchestration_id);
+CREATE INDEX IF NOT EXISTS idx_budget_model ON arcus_context_budget_logs(model_id);
+CREATE INDEX IF NOT EXISTS idx_budget_created ON arcus_context_budget_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_budget_utilization ON arcus_context_budget_logs(utilization_rate DESC);
+
+COMMENT ON TABLE arcus_context_budget_logs IS 'Phase 2: Context budget allocation tracking';
+
+-- ============================================================================
+-- PHASE 2: RPC FUNCTIONS
+-- ============================================================================
+
+-- Function to update skill usage counters atomically
+CREATE OR REPLACE FUNCTION increment_skill_counters(
+    p_skill_name TEXT,
+    p_is_success BOOLEAN,
+    p_is_failure BOOLEAN
+)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE arcus_skills
+    SET
+        usage_count = usage_count + 1,
+        success_count = success_count + CASE WHEN p_is_success THEN 1 ELSE 0 END,
+        failure_count = failure_count + CASE WHEN p_is_failure THEN 1 ELSE 0 END,
+        last_used = NOW(),
+        updated_at = NOW()
+    WHERE name = p_skill_name;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to get best skill for a capability based on success rate
+CREATE OR REPLACE FUNCTION get_best_skill_for_capability(
+    p_capability TEXT,
+    p_min_usage INTEGER DEFAULT 3
+)
+RETURNS TABLE(
+    skill_name TEXT,
+    skill_category TEXT,
+    success_rate FLOAT,
+    avg_latency_ms INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        s.name,
+        s.category,
+        s.success_rate,
+        s.avg_latency_ms
+    FROM arcus_skills s
+    WHERE s.status = 'active'
+      AND s.usage_count >= p_min_usage
+      AND s.capabilities @> jsonb_build_array(jsonb_build_object('name', p_capability))
+    ORDER BY s.success_rate DESC, s.avg_latency_ms ASC
+    LIMIT 1;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
+-- PHASE 2: VIEWS
+-- ============================================================================
+
+-- View: Skill performance summary
+CREATE OR REPLACE VIEW skill_performance_summary AS
+SELECT
+    name,
+    category,
+    status,
+    usage_count,
+    success_rate,
+    avg_latency_ms,
+    avg_cost_usd,
+    last_used,
+    ARRAY_LENGTH(capabilities::jsonb[], 1) AS capability_count
+FROM arcus_skills
+WHERE status = 'active'
+ORDER BY usage_count DESC, success_rate DESC;
+
+-- View: Recent orchestration runs
+CREATE OR REPLACE VIEW recent_orchestration_runs AS
+SELECT
+    plan_id,
+    task_description,
+    task_context,
+    status,
+    skills_executed,
+    skills_succeeded,
+    total_latency_ms,
+    total_cost_usd,
+    primary_model,
+    started_at,
+    completed_at
+FROM arcus_orchestration_runs
+WHERE started_at > NOW() - INTERVAL '7 days'
+ORDER BY started_at DESC
+LIMIT 100;
+
+-- View: Context budget efficiency
+CREATE OR REPLACE VIEW context_budget_efficiency AS
+SELECT
+    model_id,
+    COUNT(*) AS allocation_count,
+    AVG(utilization_rate) AS avg_utilization,
+    AVG(total_used) AS avg_tokens_used,
+    SUM(items_dropped) AS total_items_dropped,
+    AVG(items_episodic + items_semantic + items_procedural + items_graph) AS avg_items_selected
+FROM arcus_context_budget_logs
+WHERE created_at > NOW() - INTERVAL '30 days'
+GROUP BY model_id
+ORDER BY avg_utilization DESC;
+
+-- ============================================================================
+-- PHASE 2: SEED DATA
+-- ============================================================================
+
+-- Insert built-in skills
+INSERT INTO arcus_skills (
+    name, description, category, status, capabilities,
+    preferred_models, avg_latency_ms, avg_cost_usd, tags, source
+) VALUES
+(
+    'knowledge_repository',
+    'LEARN-RECALL-RELATE-REFLECT operations on persistent memory',
+    'knowledge',
+    'active',
+    '[
+        {"name": "learn", "description": "Store new knowledge", "estimated_latency_ms": 500},
+        {"name": "recall", "description": "Retrieve relevant knowledge", "estimated_latency_ms": 1000},
+        {"name": "relate", "description": "Create entity relationships", "estimated_latency_ms": 500},
+        {"name": "reflect", "description": "Synthesize insights from learnings", "estimated_latency_ms": 3000}
+    ]'::jsonb,
+    ARRAY['claude-sonnet', 'gemini-3-flash'],
+    1000,
+    0.001,
+    ARRAY['memory', 'knowledge', 'persistence'],
+    '{"type": "system", "note": "Built-in skill"}'
+),
+(
+    'research',
+    'Research and information gathering',
+    'research',
+    'active',
+    '[
+        {"name": "search", "description": "Search for information", "estimated_latency_ms": 2000},
+        {"name": "summarize", "description": "Summarize findings", "estimated_latency_ms": 1500},
+        {"name": "synthesize", "description": "Synthesize multiple sources", "estimated_latency_ms": 3000}
+    ]'::jsonb,
+    ARRAY['gemini-3-pro', 'deep-research'],
+    2000,
+    0.005,
+    ARRAY['research', 'search', 'analysis'],
+    '{"type": "system", "note": "Built-in skill"}'
+),
+(
+    'code_analysis',
+    'Code review and analysis',
+    'code',
+    'active',
+    '[
+        {"name": "review", "description": "Review code for issues", "estimated_latency_ms": 3000},
+        {"name": "explain", "description": "Explain code functionality", "estimated_latency_ms": 2000},
+        {"name": "suggest", "description": "Suggest improvements", "estimated_latency_ms": 2500},
+        {"name": "security_scan", "description": "Scan for security issues", "estimated_latency_ms": 4000}
+    ]'::jsonb,
+    ARRAY['claude-opus', 'claude-sonnet'],
+    3000,
+    0.01,
+    ARRAY['code', 'review', 'analysis', 'security'],
+    '{"type": "system", "note": "Built-in skill"}'
+)
+ON CONFLICT (name) DO NOTHING;
+
+-- ============================================================================
 -- COMPLETION
 -- ============================================================================
 
@@ -957,4 +1416,4 @@ ON CONFLICT DO NOTHING;
 -- GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 -- GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
-COMMENT ON SCHEMA public IS 'Arcus Knowledge Repository v1.0.0 - Schema created 2026-01-24';
+COMMENT ON SCHEMA public IS 'Arcus Knowledge Repository v1.1.0 - Phase 2 Schema (Skill Orchestration + Context Budgeting) - Updated 2026-01-25';

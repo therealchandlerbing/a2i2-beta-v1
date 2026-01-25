@@ -223,6 +223,147 @@ Customize routing behavior per user and context:
 
 ---
 
+## Skill Orchestration Layer *(NEW - Phase 2)*
+
+The skill orchestration layer coordinates multiple skills with intelligent context management.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     SKILL ORCHESTRATION ARCHITECTURE                         │
+│                                                                              │
+│   ┌─────────────┐                                                           │
+│   │    Task     │                                                           │
+│   │  "Research  │                                                           │
+│   │  TechCorp"  │                                                           │
+│   └──────┬──────┘                                                           │
+│          │                                                                   │
+│          ▼                                                                   │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                    SKILL ORCHESTRATOR                            │       │
+│   │  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐       │       │
+│   │  │ Skill         │  │ Context       │  │ Model         │       │       │
+│   │  │ Registry      │  │ Budget        │  │ Router        │       │       │
+│   │  │               │  │ Manager       │  │               │       │       │
+│   │  └───────────────┘  └───────────────┘  └───────────────┘       │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│          │                      │                     │                      │
+│          ▼                      ▼                     ▼                      │
+│   ┌─────────────┐        ┌─────────────┐       ┌─────────────┐              │
+│   │ Knowledge   │        │ Context     │       │ Gemini 3    │              │
+│   │ Repository  │        │ Assembly    │       │ Pro         │              │
+│   │ (recall)    │        │ (pack)      │       │             │              │
+│   └─────────────┘        └─────────────┘       └─────────────┘              │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+| Component | Description |
+|-----------|-------------|
+| **Skill Registry** | Register and discover skills by capability |
+| **Context Budget Manager** | Allocate tokens across memory types |
+| **Skill Executor** | Execute skills with timeout and retry handling |
+| **Outcome Learning** | Record outcomes to improve future orchestration |
+
+### Quick Example
+
+```python
+from skill_orchestrator import SkillOrchestrator
+
+orchestrator = SkillOrchestrator()
+
+# Execute an orchestrated task
+result = await orchestrator.execute(
+    task="Find all information about TechCorp and their preferences",
+    context="research",
+    user_id="default"
+)
+
+print(f"Status: {result.status.value}")
+print(f"Skills executed: {len(result.skill_results)}")
+print(f"Total latency: {result.total_latency_ms}ms")
+print(f"Context tokens: {result.context_assembled.total_tokens}")
+```
+
+---
+
+## Dynamic Context Budgeting *(NEW - Phase 2)*
+
+Intelligent context management that maximizes knowledge injection within model limits.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     CONTEXT BUDGET FLOW                                      │
+│                                                                              │
+│   Model Context: 200,000 tokens                                              │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                                                                   │       │
+│   │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌───────────────────┐  │       │
+│   │  │ System  │  │Response │  │Overhead │  │ Available for     │  │       │
+│   │  │ Prompt  │  │ Reserve │  │  (15%)  │  │ Context: 161,000  │  │       │
+│   │  │ 5,000   │  │ 4,000   │  │ 30,000  │  │                   │  │       │
+│   │  └─────────┘  └─────────┘  └─────────┘  └───────────────────┘  │       │
+│   │                                                                   │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+│   Context Allocation:                                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │ Procedural (35%)  │ Semantic (30%)  │ Episodic (25%)  │Graph(10%)│       │
+│   │     56,350        │    48,300       │    40,250       │  16,100  │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+│   Quality Ranking (per item):                                                │
+│   ┌────────────┬────────────┬────────────┬────────────┐                     │
+│   │  Recency   │ Confidence │ Relevance  │ Importance │ = Rank Score        │
+│   │    25%     │    25%     │    25%     │    25%     │                     │
+│   └────────────┴────────────┴────────────┴────────────┘                     │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Ranking Strategies
+
+| Strategy | Description |
+|----------|-------------|
+| **Recency** | Prefer recent items (exponential decay) |
+| **Confidence** | Prefer high-confidence items |
+| **Relevance** | Prefer items matching query |
+| **Importance** | Prefer critical/high-importance items |
+| **Balanced** | Equal weight to all factors |
+
+### Quick Example
+
+```python
+from context_budget import ContextBudgetManager
+
+manager = ContextBudgetManager(model_id="claude-sonnet")
+
+# Allocate budget
+allocation = manager.allocate_budget(
+    base_prompt_tokens=5000,
+    expected_response_tokens=4000,
+    task_context="code_review"
+)
+
+# Pack knowledge within budget
+packed = manager.pack_knowledge(
+    allocation=allocation,
+    semantic_items=facts,
+    procedural_items=preferences,
+    episodic_items=events,
+    query="TypeScript best practices"
+)
+
+# Assemble formatted context
+context = manager.assemble_context(packed, format_style="markdown")
+print(f"Context tokens: {context.total_tokens}")
+print(f"Items selected: {packed.total_items}")
+print(f"Items dropped: {packed.dropped_items}")
+```
+
+---
+
 ## Core Operations
 
 ### LEARN - Capture Knowledge
@@ -285,15 +426,18 @@ Periodic synthesis:
 ├── docs/
 │   ├── ARCHITECTURE.md         # Complete technical architecture
 │   ├── VISION.md               # Long-term vision document
+│   ├── GEMINI-INTEGRATION.md   # Gemini multi-model guide
 │   └── TOOLORCHESTRA-REVIEW.md # ToolOrchestra analysis & enhancements
 │
 ├── schemas/
-│   └── supabase-schema.sql     # Database schema (incl. orchestration tables)
+│   └── supabase-schema.sql     # Database schema (Phase 1 + Phase 2 tables)
 │
 ├── src/
-│   ├── types.ts                # TypeScript type definitions
+│   ├── types.ts                # TypeScript type definitions (incl. Phase 2)
 │   ├── knowledge_operations.py # Core Python operations
-│   └── model_router.py         # Intelligent model routing (NEW)
+│   ├── model_router.py         # Intelligent model routing
+│   ├── context_budget.py       # Dynamic context budgeting (NEW - Phase 2)
+│   └── skill_orchestrator.py   # Skill orchestration layer (NEW - Phase 2)
 │
 ├── config/
 │   └── memory-template.md      # Template for CLAUDE.memory.md
@@ -344,26 +488,29 @@ Currently starting at Level 0, building trust through successful interactions.
 
 ## Future Capabilities
 
-### Phase 1.5: Orchestration Enhancements (In Progress)
-- RL-based routing optimization
-- Real-time constraint adaptation
-- A/B testing framework for models
-- Complexity classifier integration
+### Phase 1: Foundation (Completed)
+- Efficiency tracking in autonomy audit
+- Tool pattern procedural memory
+- Basic preference vectors
+- Model Router integration
 
-### Phase 2: Intelligence (Planned)
+### Phase 2: Skill Orchestration (Completed)
+- **Skill Orchestration Layer** - Intelligent skill coordination
+- **Dynamic Context Budgeting** - Token-efficient context assembly
+- Skill registry with capabilities
+- Multi-skill execution coordination
+- Context packing with quality ranking
+
+### Phase 3: Intelligence (Planned)
 - Vector embeddings for semantic search
+- Digital Twin Modeling (DTM)
+- Autonomy Trust Ledger enhancements
 - Pattern detection and recommendations
-- Automatic context injection
 
-### Phase 3: Voice (Planned)
+### Phase 4: Voice & Autonomy (Planned)
 - Real-time voice interface via PersonaPlex
-- Voice memory (transcription + context)
-- Meeting integration with knowledge extraction
-
-### Phase 4: Autonomy (Planned)
-- Pre-approved action categories
+- Voice-Native Knowledge Graph (VNKG)
 - Proactive task execution
-- Self-correction and learning
 - Federated organizational intelligence
 
 ## Configuration
@@ -423,7 +570,20 @@ Located at repository root, this file:
 
 ## Version History
 
-### v1.1.0 (2026-01-25)
+### v1.2.0 (2026-01-25) - Phase 2: Skill Orchestration
+- **Skill Orchestration Layer** - Multi-skill coordination with intelligent planning
+- **Dynamic Context Budgeting** - Token-efficient context assembly within model limits
+- **Skill Registry** - Register, discover, and execute skills by capability
+- **Context Packing** - Quality-based ranking and selection of knowledge items
+- **Ranking Strategies** - Recency, confidence, relevance, importance, balanced
+- New `context_budget.py` for intelligent context management
+- New `skill_orchestrator.py` for skill coordination
+- New database tables: `arcus_skills`, `arcus_skill_executions`, `arcus_orchestration_runs`, `arcus_context_budget_logs`
+- New RPC functions: `increment_skill_counters()`, `get_best_skill_for_capability()`
+- New views: `skill_performance_summary`, `recent_orchestration_runs`, `context_budget_efficiency`
+- Extended TypeScript types for Phase 2 components
+
+### v1.1.0 (2026-01-25) - Phase 1: Foundation
 - **Model Orchestration** - Intelligent routing inspired by NVIDIA ToolOrchestra
 - **User Preference Vectors** - Customizable accuracy/cost/latency weights
 - **Model Patterns** - Cross-session learning from outcomes
@@ -433,7 +593,7 @@ Located at repository root, this file:
 - Enhanced Supabase schema with `arcus_model_patterns` and `arcus_user_preference_vectors` tables
 - ToolOrchestra review document with enhancement roadmap
 
-### v1.0.0 (2026-01-24)
+### v1.0.0 (2026-01-24) - Initial Release
 - Initial architecture design
 - Five memory types implemented
 - Supabase schema created

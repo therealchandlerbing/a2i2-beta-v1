@@ -767,3 +767,372 @@ export interface EfficiencyReport {
   }>;
   recommendations: string[];
 }
+
+// ============================================================================
+// PHASE 2: CONTEXT BUDGETING TYPES
+// ============================================================================
+
+export type RankingStrategy = 'recency' | 'confidence' | 'relevance' | 'balanced' | 'importance';
+
+export type PackingStrategy = 'greedy' | 'diverse' | 'dense';
+
+export interface TokenEstimate {
+  content_tokens: number;
+  metadata_tokens: number;
+  total_tokens: number;
+  char_count: number;
+  confidence: ConfidenceLevel;
+}
+
+export interface BudgetAllocation {
+  total_available: number;
+  reserved_for_prompt: number;
+  reserved_for_response: number;
+  reserved_for_overhead: number;
+  available_for_context: number;
+  allocation_by_type: Record<string, number>;
+  priority_weights: Record<string, number>;
+}
+
+export interface RankedItem {
+  item: Record<string, unknown>;
+  memory_type: KnowledgeType;
+  token_estimate: number;
+  rank_score: number;
+  recency_score: number;
+  confidence_score: number;
+  relevance_score: number;
+  importance_score: number;
+  selected: boolean;
+}
+
+export interface PackedContext {
+  items_by_type: Record<string, Record<string, unknown>[]>;
+  tokens_by_type: Record<string, number>;
+  total_tokens: number;
+  total_items: number;
+  dropped_items: number;
+  coverage_by_type: Record<string, number>;
+  packing_strategy: PackingStrategy;
+  ranking_strategy: RankingStrategy;
+}
+
+export interface ContextPayload {
+  formatted_context: string;
+  total_tokens: number;
+  sections: Record<string, string>;
+  metadata: {
+    total_items: number;
+    dropped_items: number;
+    coverage_by_type: Record<string, number>;
+    packing_strategy: PackingStrategy;
+    ranking_strategy: RankingStrategy;
+  };
+}
+
+export interface ContextBudgetLog {
+  id: UUID;
+  orchestration_id?: string;
+  execution_id?: string;
+  model_id: string;
+  model_context_limit: number;
+  total_available: number;
+  reserved_for_prompt: number;
+  reserved_for_response: number;
+  reserved_for_overhead: number;
+  available_for_context: number;
+  allocation_episodic: number;
+  allocation_semantic: number;
+  allocation_procedural: number;
+  allocation_graph: number;
+  used_episodic: number;
+  used_semantic: number;
+  used_procedural: number;
+  used_graph: number;
+  total_used: number;
+  items_episodic: number;
+  items_semantic: number;
+  items_procedural: number;
+  items_graph: number;
+  items_dropped: number;
+  utilization_rate: number;
+  ranking_strategy?: RankingStrategy;
+  packing_strategy?: PackingStrategy;
+  query_text?: string;
+  created_at: string;
+  metadata: Record<string, unknown>;
+}
+
+// ============================================================================
+// PHASE 2: SKILL ORCHESTRATION TYPES
+// ============================================================================
+
+export type SkillStatus = 'active' | 'deprecated' | 'experimental' | 'disabled';
+
+export type ExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout';
+
+export type SkillCategory =
+  | 'knowledge'
+  | 'research'
+  | 'code'
+  | 'communication'
+  | 'integration'
+  | 'analysis'
+  | 'voice';
+
+export interface SkillCapability {
+  name: string;
+  description: string;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+  estimated_latency_ms: number;
+  estimated_cost_usd: number;
+  requires_context: string[];
+}
+
+export interface SkillDefinition {
+  id: UUID;
+  name: string;
+  description: string;
+  category: SkillCategory;
+  version: string;
+  status: SkillStatus;
+  capabilities: SkillCapability[];
+  required_context: string[];
+  optional_context: string[];
+  preferred_models: string[];
+  excluded_models: string[];
+  min_context_window: number;
+  avg_latency_ms: number;
+  avg_cost_usd: number;
+  max_retries: number;
+  timeout_ms: number;
+  depends_on: string[];
+  conflicts_with: string[];
+  usage_count: number;
+  success_count: number;
+  failure_count: number;
+  success_rate: number;
+  last_used?: string;
+  tags: string[];
+  metadata: Record<string, unknown>;
+  source: KnowledgeSource;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SkillDefinitionInput {
+  name: string;
+  description?: string;
+  category?: SkillCategory;
+  version?: string;
+  status?: SkillStatus;
+  capabilities?: Array<string | SkillCapability>;
+  required_context?: string[];
+  optional_context?: string[];
+  preferred_models?: string[];
+  excluded_models?: string[];
+  min_context_window?: number;
+  avg_latency_ms?: number;
+  avg_cost_usd?: number;
+  max_retries?: number;
+  timeout_ms?: number;
+  depends_on?: string[];
+  conflicts_with?: string[];
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+  source?: KnowledgeSource;
+}
+
+export interface SkillExecutionRequest {
+  skill_name: string;
+  capability: string;
+  inputs: Record<string, unknown>;
+  context?: Record<string, unknown>;
+  user_id: string;
+  session_id?: string;
+  priority: number;
+  timeout_ms?: number;
+}
+
+export interface SkillExecutionResult {
+  id: UUID;
+  execution_id: string;
+  skill_id?: UUID;
+  skill_name: string;
+  capability: string;
+  status: ExecutionStatus;
+  inputs: Record<string, unknown>;
+  output?: unknown;
+  error?: string;
+  latency_ms: number;
+  tokens_input: number;
+  tokens_output: number;
+  tokens_thinking: number;
+  tokens_total: number;
+  cost_usd: number;
+  model_used?: string;
+  thinking_level?: 'minimal' | 'low' | 'medium' | 'high';
+  fallback_used: boolean;
+  context_tokens: number;
+  context_sources: string[];
+  user_id: string;
+  session_id?: string;
+  orchestration_id?: string;
+  started_at?: string;
+  completed_at?: string;
+  created_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface OrchestrationPlanStep {
+  skill: string;
+  capability: string;
+  order: number;
+  parallel: boolean;
+  depends_on?: string[];
+  estimated_latency_ms?: number;
+  estimated_cost_usd?: number;
+}
+
+export interface OrchestrationPlan {
+  plan_id: string;
+  task_description: string;
+  steps: OrchestrationPlanStep[];
+  estimated_total_latency_ms: number;
+  estimated_total_cost_usd: number;
+  context_allocation?: BudgetAllocation;
+  model_decision?: OrchestrationDecision;
+}
+
+export type OrchestrationRunStatus = 'planning' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export interface OrchestrationRun {
+  id: UUID;
+  plan_id: string;
+  task_description: string;
+  task_context?: string;
+  capabilities_requested: string[];
+  status: OrchestrationRunStatus;
+  plan_steps: OrchestrationPlanStep[];
+  skills_used: string[];
+  total_latency_ms: number;
+  total_tokens_used: number;
+  total_cost_usd: number;
+  skills_executed: number;
+  skills_succeeded: number;
+  skills_failed: number;
+  context_budget_total?: number;
+  context_budget_used?: number;
+  context_allocation?: Record<string, number>;
+  context_coverage?: Record<string, number>;
+  primary_model?: string;
+  primary_model_confidence?: ConfidenceLevel;
+  fallback_model?: string;
+  final_output?: unknown;
+  user_id: string;
+  session_id?: string;
+  started_at: string;
+  completed_at?: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface OrchestrationResult {
+  plan_id: string;
+  status: ExecutionStatus;
+  skill_results: SkillExecutionResult[];
+  final_output?: unknown;
+  total_latency_ms: number;
+  total_tokens_used: number;
+  total_cost_usd: number;
+  context_assembled?: ContextPayload;
+  patterns_learned: number;
+}
+
+// ============================================================================
+// PHASE 2: MODEL ROUTING TYPES (Enhanced)
+// ============================================================================
+
+export interface ModelConfig {
+  id: string;
+  name: string;
+  provider: 'anthropic' | 'google' | 'nvidia' | string;
+  cost_per_1k_input: number;
+  cost_per_1k_output: number;
+  avg_latency_ms: number;
+  max_context: number;
+  capabilities: string[];
+  thinking_levels: string[];
+  best_for: string[];
+}
+
+export interface RoutingDecision {
+  model_id: string;
+  model_config: ModelConfig;
+  thinking_level: 'minimal' | 'low' | 'medium' | 'high' | null;
+  estimated_cost: number;
+  estimated_latency_ms: number;
+  confidence: ConfidenceLevel;
+  reasoning: string;
+  matched_pattern_id?: UUID;
+  fallback_model?: string;
+}
+
+export interface RoutingRequest {
+  task: string;
+  context?: string;
+  complexity?: TaskComplexity;
+  preference_context?: string;
+  user_id?: string;
+  required_capabilities?: string[];
+  max_cost_usd?: number;
+  max_latency_ms?: number;
+  exclude_models?: string[];
+}
+
+// ============================================================================
+// PHASE 2: ANALYTICS TYPES
+// ============================================================================
+
+export interface SkillPerformanceSummary {
+  name: string;
+  category: SkillCategory;
+  status: SkillStatus;
+  usage_count: number;
+  success_rate: number;
+  avg_latency_ms: number;
+  avg_cost_usd: number;
+  last_used?: string;
+  capability_count: number;
+}
+
+export interface ContextBudgetEfficiency {
+  model_id: string;
+  allocation_count: number;
+  avg_utilization: number;
+  avg_tokens_used: number;
+  total_items_dropped: number;
+  avg_items_selected: number;
+}
+
+export interface OrchestrationAnalytics {
+  period: {
+    start: string;
+    end: string;
+  };
+  total_orchestrations: number;
+  success_rate: number;
+  avg_latency_ms: number;
+  total_cost_usd: number;
+  skills_breakdown: Record<string, {
+    usage_count: number;
+    success_rate: number;
+    avg_latency_ms: number;
+  }>;
+  context_efficiency: {
+    avg_utilization: number;
+    avg_items_selected: number;
+    avg_items_dropped: number;
+  };
+  recommendations: string[];
+}
