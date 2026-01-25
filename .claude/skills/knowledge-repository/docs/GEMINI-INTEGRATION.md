@@ -620,6 +620,844 @@ def select_model(task: dict) -> ModelType:
 
 ---
 
+## Gemini-Enhanced Core Operations
+
+A2I2's four core knowledge operations can be significantly enhanced by Gemini capabilities. Here's how to use Gemini for each operation:
+
+### LEARN Operation (Knowledge Capture)
+
+**When to use Gemini for LEARN:**
+| Scenario | Model | Why |
+|:---------|:------|:----|
+| Document > 200K tokens | Gemini 3 Pro | 1M context window |
+| Multi-modal content (images, video) | Gemini 3 Pro | Native multimodal |
+| Extract structured facts | Gemini 3 Flash | Fast structured output |
+| Real-time information | Gemini 3 Flash + Search | Grounded in current data |
+| Nuanced context/emotion | Claude | Better empathy/tone |
+
+**Gemini-powered LEARN implementation:**
+
+```python
+from google import genai
+from google.genai import types
+
+class GeminiLearner:
+    """Use Gemini to enhance LEARN operations."""
+
+    def __init__(self):
+        self.client = genai.Client()
+        self.repo = KnowledgeRepository()
+
+    def learn_from_large_document(self, document_bytes: bytes, mime_type: str):
+        """
+        LEARN from documents up to 1M tokens using Gemini 3 Pro.
+        Extracts facts, events, processes, and relationships.
+        """
+        response = self.client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=[
+                types.Part(text="""Extract knowledge from this document:
+
+1. SEMANTIC FACTS: Key information, data points, definitions
+2. EPISODIC EVENTS: Decisions, meetings, milestones with dates
+3. PROCEDURAL WORKFLOWS: Processes, steps, how things work
+4. ENTITIES & RELATIONSHIPS: People, organizations, connections
+
+Return as JSON with keys: facts, events, workflows, entities"""),
+                types.Part(inline_data=types.Blob(mime_type=mime_type, data=document_bytes))
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(thinking_level="high")
+            )
+        )
+
+        import json
+        extracted = json.loads(response.text)
+
+        # Store to appropriate memory types
+        for fact in extracted.get("facts", []):
+            self.repo.learn("semantic", fact, confidence=0.85, source="gemini_extraction")
+
+        for event in extracted.get("events", []):
+            self.repo.learn("episodic", event, confidence=0.85)
+
+        for workflow in extracted.get("workflows", []):
+            self.repo.learn("procedural", workflow, confidence=0.80)
+
+        for entity in extracted.get("entities", []):
+            self.repo.relate(entity["source"], entity["relationship"], entity["target"])
+
+        return extracted
+```
+
+### RECALL Operation (Knowledge Retrieval)
+
+**When to use Gemini for RECALL:**
+| Scenario | Model | Why |
+|:---------|:------|:----|
+| Need current information | Gemini 3 Flash + Search | Real-time grounding |
+| Query asks "latest" or "today" | Gemini 3 Flash + Search | Up-to-date results |
+| Internal knowledge sufficient | Repository only | Faster, no API cost |
+| Complex synthesis needed | Gemini 3 Pro | Deep reasoning |
+
+**Gemini-powered RECALL implementation:**
+
+```python
+def recall_with_grounding(self, query: str, needs_current_info: bool = False):
+    """
+    RECALL that combines internal knowledge with optional real-time grounding.
+    """
+    # Step 1: Retrieve from internal knowledge repository
+    internal_context = self.repo.recall(
+        query=query,
+        memory_types=["semantic", "episodic", "procedural"],
+        limit=10
+    )
+
+    context_str = self._format_memories(internal_context)
+
+    # Step 2: Determine if grounding is needed
+    tools = []
+    if needs_current_info or self._query_needs_current_info(query):
+        tools = [{"google_search": {}}, {"url_context": {}}]
+
+    # Step 3: Synthesize with Gemini
+    model = "gemini-3-flash-preview" if tools else "gemini-3-pro-preview"
+
+    response = self.client.models.generate_content(
+        model=model,
+        contents=f"""Based on internal knowledge:
+{context_str}
+
+{"Use search to supplement with current information." if tools else ""}
+
+Answer the query: {query}
+
+Distinguish between internal knowledge and new information from search.""",
+        config=types.GenerateContentConfig(
+            tools=tools if tools else None,
+            thinking_config=types.ThinkingConfig(thinking_level="high")
+        )
+    )
+
+    return {
+        "answer": response.text,
+        "sources": {"internal": internal_context, "grounded": bool(tools)}
+    }
+
+def _query_needs_current_info(self, query: str) -> bool:
+    """Detect if query needs real-time information."""
+    current_indicators = ["latest", "today", "current", "now", "recent",
+                         "this week", "2026", "breaking", "update"]
+    return any(indicator in query.lower() for indicator in current_indicators)
+```
+
+### RELATE Operation (Build Connections)
+
+**When to use Gemini for RELATE:**
+| Scenario | Model | Why |
+|:---------|:------|:----|
+| Extract relationships from text | Gemini 3 Flash | Structured extraction |
+| Discover hidden connections | Gemini 3 Pro | Deep analysis |
+| Multi-hop inference | Gemini 3 Pro | Complex reasoning |
+| Entity disambiguation | Gemini 3 Pro | Contextual understanding |
+
+**Gemini-powered RELATE implementation:**
+
+```python
+def relate_with_gemini(self, context: str, entities: list = None):
+    """
+    Use Gemini to discover and extract relationships.
+    """
+    prompt = f"""Analyze this context and extract ALL relationships:
+
+Context: {context}
+{"Known entities: " + ", ".join(entities) if entities else ""}
+
+For each relationship, provide:
+1. Source entity (name and type)
+2. Relationship type (works_for, manages, collaborates_with, etc.)
+3. Target entity (name and type)
+4. Confidence score (0.0-1.0)
+5. Supporting evidence (quote from context)
+
+Also identify:
+- Indirect/inferred relationships (A→B and B→C implies A→?→C)
+- Temporal changes (relationships that started/ended)
+- Influence levels (strong, moderate, weak)
+
+Return as JSON with key 'relationships'."""
+
+    response = self.client.models.generate_content(
+        model="gemini-3-pro-preview",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            thinking_config=types.ThinkingConfig(thinking_level="high")
+        )
+    )
+
+    import json
+    relationships = json.loads(response.text).get("relationships", [])
+
+    # Store each relationship
+    for rel in relationships:
+        self.repo.relate(
+            source=rel["source"],
+            relationship=rel["relationship"],
+            target=rel["target"],
+            properties={
+                "confidence": rel.get("confidence", 0.7),
+                "evidence": rel.get("evidence"),
+                "influence": rel.get("influence")
+            }
+        )
+
+    return relationships
+```
+
+### REFLECT Operation (Synthesize Insights)
+
+**When to use Gemini for REFLECT:**
+| Scenario | Model | Why |
+|:---------|:------|:----|
+| Periodic synthesis (daily/weekly) | Gemini 3 Pro | Deep reasoning |
+| Pattern detection | Gemini 3 Pro | Complex analysis |
+| Comprehensive research | Deep Research | Multi-step autonomous |
+| Quick summary | Gemini 3 Flash | Fast turnaround |
+
+**Important:** REFLECT synthesizes *existing* knowledge. Deep Research gathers *new* external knowledge. Use appropriately.
+
+**Gemini-powered REFLECT implementation:**
+
+```python
+def reflect_with_gemini(self, time_period_days: int = 30):
+    """
+    Use Gemini to synthesize insights from accumulated memories.
+    This is REFLECT - analyzing what we already know.
+    """
+    # Gather recent memories
+    recent_episodic = self.repo.recall_recent_events(days=time_period_days)
+    recent_learnings = self.repo.recall_recent_learnings(days=time_period_days)
+    relationship_changes = self.repo.recall_relationship_changes(days=time_period_days)
+
+    context = f"""
+EPISODIC MEMORIES (Recent Events):
+{self._format_episodic(recent_episodic)}
+
+SEMANTIC LEARNINGS (New Knowledge):
+{self._format_semantic(recent_learnings)}
+
+RELATIONSHIP CHANGES:
+{self._format_relationships(relationship_changes)}
+"""
+
+    response = self.client.models.generate_content(
+        model="gemini-3-pro-preview",
+        contents=f"""Reflect on the past {time_period_days} days of organizational activity:
+
+{context}
+
+Synthesize insights:
+1. PATTERNS: Recurring themes, frequent topics, repeated behaviors
+2. ANOMALIES: Unusual events, unexpected changes, outliers
+3. TRENDS: Directional changes over time
+4. CONNECTIONS: New relationships or strengthened ties
+5. RECOMMENDATIONS: Suggested actions based on patterns
+6. CONTRADICTIONS: Conflicting information that needs resolution
+
+Score confidence for each insight (0.0-1.0).
+Return as JSON with these keys.""",
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            thinking_config=types.ThinkingConfig(thinking_level="high")
+        )
+    )
+
+    import json
+    insights = json.loads(response.text)
+
+    # Store insights as new semantic knowledge
+    for pattern in insights.get("patterns", []):
+        self.repo.learn("semantic", {
+            "type": "reflection_pattern",
+            "content": pattern,
+            "period": f"last_{time_period_days}_days"
+        }, confidence=pattern.get("confidence", 0.7))
+
+    return insights
+```
+
+### Decision Tree: Which Model for Which Operation?
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    A2I2 MODEL SELECTION DECISION TREE                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   LEARN OPERATION                                                            │
+│   ├─ Document > 200K tokens? ──────────────────────▶ Gemini 3 Pro           │
+│   ├─ Contains images/video/audio? ─────────────────▶ Gemini 3 Pro           │
+│   ├─ Need structured extraction? ──────────────────▶ Gemini 3 Flash         │
+│   └─ Conversational/emotional context? ────────────▶ Claude                 │
+│                                                                              │
+│   RECALL OPERATION                                                           │
+│   ├─ Query asks about "current" or "latest"? ──────▶ Gemini + Search        │
+│   ├─ Internal knowledge sufficient? ───────────────▶ Repository only        │
+│   └─ Need deep synthesis? ─────────────────────────▶ Gemini 3 Pro           │
+│                                                                              │
+│   RELATE OPERATION                                                           │
+│   ├─ Extract from large corpus? ───────────────────▶ Gemini 3 Pro           │
+│   ├─ Simple relationship tagging? ─────────────────▶ Gemini 3 Flash         │
+│   └─ Multi-hop inference needed? ──────────────────▶ Gemini 3 Pro (high)    │
+│                                                                              │
+│   REFLECT OPERATION                                                          │
+│   ├─ Need external research? ──────────────────────▶ Deep Research Agent    │
+│   ├─ Synthesize internal knowledge? ───────────────▶ Gemini 3 Pro           │
+│   └─ Quick daily summary? ─────────────────────────▶ Gemini 3 Flash         │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Gemini-Enhanced Novel Concepts
+
+A2I2 introduces seven novel concepts. Here's how Gemini capabilities supercharge each:
+
+### 1. Cognitive Architecture Protocol (CAP)
+
+**Definition**: Open standard for organizational memory that enables AI systems to share knowledge structures.
+
+**Gemini Enhancement:**
+```python
+class GeminiCAP:
+    """Cognitive Architecture Protocol powered by Gemini."""
+
+    def export_knowledge_schema(self, memory_type: str) -> dict:
+        """
+        Use Gemini to generate standardized knowledge schemas
+        that can be shared across AI systems.
+        """
+        response = self.client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=f"""Generate a JSON-LD schema for {memory_type} memory
+            following CAP (Cognitive Architecture Protocol) standards.
+
+            Include:
+            - @context with standard ontology references
+            - Entity definitions with types
+            - Relationship predicates
+            - Confidence scoring fields
+            - Temporal annotations
+
+            Format as valid JSON-LD.""",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(thinking_level="high")
+            )
+        )
+        return json.loads(response.text)
+
+    def translate_cross_system(self, source_schema: dict, target_format: str) -> dict:
+        """Translate knowledge between different AI systems' formats."""
+        response = self.client.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=f"""Translate this knowledge schema:
+            {json.dumps(source_schema)}
+
+            To target format: {target_format}
+
+            Preserve semantic meaning and relationships.""",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        return json.loads(response.text)
+```
+
+| Gemini Capability | CAP Application |
+|:------------------|:----------------|
+| 1M context | Process large knowledge graphs |
+| Structured output | Generate standardized schemas |
+| Code execution | Validate schema correctness |
+
+### 2. Digital Twin Modeling (DTM)
+
+**Definition**: Model HOW users think, not just WHAT they know—capturing reasoning patterns, decision-making styles, and preferences.
+
+**Gemini Enhancement:**
+```python
+class GeminiDTM:
+    """Digital Twin Modeling powered by Gemini's reasoning capabilities."""
+
+    def analyze_reasoning_pattern(self, interactions: list) -> dict:
+        """
+        Analyze user interactions to model their cognitive patterns.
+        """
+        response = self.client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=f"""Analyze these user interactions to model cognitive patterns:
+
+            {json.dumps(interactions)}
+
+            Extract:
+            1. DECISION_STYLE: How they make decisions (analytical, intuitive, collaborative)
+            2. INFORMATION_PREFERENCE: How they prefer to receive info (detailed, summary, visual)
+            3. COMMUNICATION_PATTERNS: Their communication style
+            4. PRIORITY_SIGNALS: What they prioritize in responses
+            5. REASONING_APPROACH: How they approach problems
+            6. TRUST_INDICATORS: What builds their trust
+
+            Return as JSON with confidence scores.""",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(thinking_level="high")
+            )
+        )
+        return json.loads(response.text)
+
+    def predict_user_response(self, context: str, user_model: dict) -> str:
+        """Predict how user would respond based on their digital twin."""
+        response = self.client.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=f"""Given this user's cognitive model:
+            {json.dumps(user_model)}
+
+            And this situation: {context}
+
+            Predict:
+            1. What questions they would likely ask
+            2. What information format they'd prefer
+            3. Potential concerns they'd raise
+            4. How they'd want this presented""",
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_level="high")
+            )
+        )
+        return response.text
+```
+
+| Gemini Capability | DTM Application |
+|:------------------|:----------------|
+| Deep reasoning | Analyze cognitive patterns |
+| Multimodal analysis | Process meeting videos for behavioral patterns |
+| Thinking levels | Adjust analysis depth per user complexity |
+
+### 3. Autonomy Trust Ledger (ATL)
+
+**Definition**: Auditable progression of AI autonomy levels based on demonstrated reliability.
+
+**Gemini Enhancement:**
+```python
+class GeminiATL:
+    """Autonomy Trust Ledger with Gemini verification."""
+
+    def evaluate_action_outcome(self, action: dict, outcome: dict) -> dict:
+        """
+        Evaluate autonomous action outcomes for trust scoring.
+        Uses Gemini's code execution to verify calculations.
+        """
+        response = self.client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=f"""Evaluate this autonomous action for trust scoring:
+
+            ACTION: {json.dumps(action)}
+            OUTCOME: {json.dumps(outcome)}
+
+            Calculate:
+            1. SUCCESS_SCORE: 0.0-1.0 based on objective completion
+            2. SAFETY_SCORE: 0.0-1.0 based on avoiding harmful outcomes
+            3. ALIGNMENT_SCORE: 0.0-1.0 based on user intent alignment
+            4. EFFICIENCY_SCORE: 0.0-1.0 based on resource usage
+            5. TRUST_DELTA: Recommended change to trust level (-0.1 to +0.1)
+
+            Execute verification calculations.""",
+            config=types.GenerateContentConfig(
+                tools=[{"code_execution": {}}],
+                response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(thinking_level="high")
+            )
+        )
+        return json.loads(response.text)
+
+    def generate_audit_report(self, time_period_days: int = 30) -> str:
+        """Generate auditable trust progression report."""
+        actions = self.repo.recall_autonomous_actions(days=time_period_days)
+
+        response = self.client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=f"""Generate an auditable trust ledger report for:
+
+            {json.dumps(actions)}
+
+            Include:
+            - Trust level progression over time
+            - Actions taken at each autonomy level
+            - Success/failure rates by category
+            - Recommendations for level adjustments
+            - Risk analysis and mitigation taken""",
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_level="high")
+            )
+        )
+        return response.text
+```
+
+| Gemini Capability | ATL Application |
+|:------------------|:----------------|
+| Code execution | Verify trust calculations |
+| Structured output | Generate audit-ready reports |
+| Deep reasoning | Analyze complex action outcomes |
+
+### 4. Voice-Native Knowledge Graph (VNKG)
+
+**Definition**: Knowledge optimized for spoken retrieval with concise, speakable summaries.
+
+**Gemini Enhancement:**
+```python
+class GeminiVNKG:
+    """Voice-Native Knowledge Graph powered by Gemini Live API."""
+
+    def convert_to_speakable(self, knowledge: dict) -> dict:
+        """Convert knowledge to voice-optimized format."""
+        response = self.client.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=f"""Convert this knowledge to voice-native format:
+
+            {json.dumps(knowledge)}
+
+            Create:
+            1. SPEAKABLE_SUMMARY: 15-30 words, natural speech rhythm
+            2. KEY_POINTS: 3-5 brief points for voice delivery
+            3. ENTITY_PRONUNCIATIONS: How to say names/terms
+            4. PROSODY_HINTS: Where to emphasize
+            5. FOLLOW_UP_PROMPTS: Natural questions user might ask
+
+            Optimize for sub-200ms voice delivery.""",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        return json.loads(response.text)
+
+    async def voice_query_with_live_api(self, audio_input: bytes) -> bytes:
+        """Process voice query and return voice response using Live API."""
+        async with self.client.aio.live.connect(
+            model="gemini-2.5-flash-native-audio-preview-12-2025",
+            config=types.LiveConnectConfig(
+                response_modalities=["AUDIO", "TEXT"],
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name="Kore"
+                        )
+                    )
+                ),
+                enable_affective_dialog=True,  # Emotional awareness
+            ),
+        ) as session:
+            # Inject VNKG context
+            vnkg_context = self.get_relevant_vnkg_context(audio_input)
+            await session.send_text(f"Context: {vnkg_context}")
+
+            # Process audio
+            await session.send_realtime_input(audio=audio_input)
+
+            response_audio = b""
+            async for response in session.receive():
+                if response.audio:
+                    response_audio += response.audio
+
+            return response_audio
+```
+
+| Gemini Capability | VNKG Application |
+|:------------------|:----------------|
+| Live API | Real-time voice retrieval |
+| Affective dialog | Emotion-aware responses |
+| TTS voices | 8 natural voice options |
+
+### 5. Institutional Memory Crystallization (IMC)
+
+**Definition**: Automated capture of tacit knowledge that would otherwise be lost.
+
+**Gemini Enhancement:**
+```python
+class GeminiIMC:
+    """Institutional Memory Crystallization with Gemini multimodal."""
+
+    def crystallize_from_video(self, video_bytes: bytes) -> dict:
+        """
+        Extract tacit knowledge from meeting videos.
+        Captures what would be lost without documentation.
+        """
+        response = self.client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=[
+                types.Part(text="""Crystallize institutional memory from this meeting:
+
+                Extract TACIT knowledge that wouldn't be in written notes:
+                1. UNWRITTEN_RULES: Implied norms, social dynamics
+                2. DECISION_CONTEXT: Why decisions were made (not just what)
+                3. RELATIONSHIP_SIGNALS: Who defers to whom, alliances
+                4. CULTURAL_PATTERNS: How the org actually works
+                5. EXPERTISE_MAP: Who knows what, go-to people
+                6. RISK_SIGNALS: Concerns that weren't formally raised
+                7. MOMENTUM_INDICATORS: What's gaining/losing support
+
+                Focus on knowledge that would be lost if attendees left."""),
+                types.Part(inline_data=types.Blob(
+                    mime_type="video/mp4",
+                    data=video_bytes
+                ))
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(thinking_level="high")
+            )
+        )
+
+        crystallized = json.loads(response.text)
+
+        # Store in knowledge repository
+        self.repo.learn("semantic", {
+            "type": "institutional_memory",
+            "crystallized": crystallized,
+            "source_type": "video_analysis",
+            "extraction_model": "gemini-3-pro"
+        })
+
+        return crystallized
+
+    def crystallize_from_departure(self, employee_data: dict) -> dict:
+        """Capture knowledge before employee departure."""
+        response = self.client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=f"""This employee is leaving the organization:
+            {json.dumps(employee_data)}
+
+            Generate knowledge crystallization interview questions to capture:
+            1. Undocumented processes they own
+            2. Key relationships and contacts
+            3. Historical context they hold
+            4. Workarounds and tricks they've developed
+            5. Pending decisions/context needed
+            6. Risks only they are aware of
+
+            Also identify what knowledge is at risk of being lost.""",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(thinking_level="high")
+            )
+        )
+        return json.loads(response.text)
+```
+
+| Gemini Capability | IMC Application |
+|:------------------|:----------------|
+| Video understanding | Extract knowledge from meetings |
+| 1M context | Process long recordings |
+| Deep reasoning | Identify tacit patterns |
+
+### 6. Chief of Staff Protocol (CoSP)
+
+**Definition**: Standardized AI work coordination specification for enterprise assistants.
+
+**Gemini Enhancement:**
+```python
+class GeminiCoSP:
+    """Chief of Staff Protocol with Gemini orchestration."""
+
+    def prioritize_tasks(self, tasks: list, context: dict) -> list:
+        """
+        AI Chief of Staff task prioritization using Gemini reasoning.
+        """
+        response = self.client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=f"""As an AI Chief of Staff, prioritize these tasks:
+
+            TASKS: {json.dumps(tasks)}
+
+            CONTEXT:
+            - Current priorities: {context.get('priorities', [])}
+            - Deadlines: {context.get('deadlines', {})}
+            - Resource constraints: {context.get('constraints', {})}
+            - User energy level: {context.get('energy', 'unknown')}
+            - Meeting schedule: {context.get('meetings', [])}
+
+            Apply Chief of Staff Protocol:
+            1. URGENCY_ANALYSIS: What needs immediate attention
+            2. IMPACT_RANKING: Which tasks have highest leverage
+            3. DEPENDENCY_MAP: What blocks what
+            4. ENERGY_MATCHING: Match task difficulty to user state
+            5. CALENDAR_OPTIMIZATION: Best time slots for each
+            6. DELEGATION_CANDIDATES: What can be delegated
+
+            Return prioritized list with rationale.""",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(thinking_level="high")
+            )
+        )
+        return json.loads(response.text)
+
+    async def research_for_decision(self, decision: str) -> dict:
+        """Use Deep Research for decision support."""
+        # Get internal context first
+        internal = self.repo.recall(
+            query=decision,
+            memory_types=["semantic", "episodic"],
+            limit=10
+        )
+
+        # Run Deep Research for external context
+        job = await self.client.aio.deep_research.research(
+            model="deep-research-pro-preview-12-2025",
+            contents=f"""Research to support this decision:
+            {decision}
+
+            Existing knowledge: {json.dumps(internal)}
+
+            Focus on:
+            - Comparable decisions by similar organizations
+            - Risk factors and mitigation strategies
+            - Best practices and lessons learned
+            - Market/competitive implications"""
+        )
+
+        while not job.done:
+            await asyncio.sleep(30)
+            job = await self.client.aio.deep_research.get(job.name)
+
+        return {
+            "internal_context": internal,
+            "external_research": job.result.report,
+            "sources": job.result.sources
+        }
+```
+
+| Gemini Capability | CoSP Application |
+|:------------------|:----------------|
+| Deep Research | Decision support research |
+| Search grounding | Real-time competitive intel |
+| Structured output | Standardized protocol responses |
+
+### 7. Federated Organizational Intelligence (FOI)
+
+**Definition**: Privacy-preserving learning across organizations without sharing raw data.
+
+**Gemini Enhancement:**
+```python
+class GeminiFOI:
+    """Federated Organizational Intelligence with privacy preservation."""
+
+    def extract_sharable_patterns(self, knowledge: list) -> dict:
+        """
+        Extract patterns that can be shared without exposing sensitive data.
+        """
+        response = self.client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=f"""Analyze this organizational knowledge:
+            {json.dumps(knowledge)}
+
+            Extract ANONYMIZED patterns that could benefit other organizations:
+
+            1. PROCESS_PATTERNS: Generic workflow optimizations
+            2. DECISION_FRAMEWORKS: Reusable decision structures
+            3. COMMUNICATION_TEMPLATES: Effective formats (anonymized)
+            4. RISK_PATTERNS: Common risk indicators
+            5. SUCCESS_PATTERNS: What leads to good outcomes
+
+            CRITICAL RULES:
+            - Remove ALL personally identifiable information
+            - Remove company-specific details
+            - Remove proprietary information
+            - Generalize to industry-level insights
+            - Flag any items that CANNOT be safely shared
+
+            Return only patterns safe for federated sharing.""",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(thinking_level="high")
+            )
+        )
+        return json.loads(response.text)
+
+    def aggregate_federated_insights(self, anonymized_patterns: list) -> dict:
+        """
+        Aggregate anonymized patterns from multiple organizations.
+        """
+        response = self.client.models.generate_content(
+            model="gemini-3-pro-preview",
+            contents=f"""Aggregate these anonymized organizational patterns:
+            {json.dumps(anonymized_patterns)}
+
+            Synthesize:
+            1. INDUSTRY_BEST_PRACTICES: Common successful patterns
+            2. UNIVERSAL_RISKS: Risks appearing across organizations
+            3. EMERGENT_TRENDS: New patterns appearing
+            4. BENCHMARK_INSIGHTS: How patterns compare
+
+            Do NOT attempt to de-anonymize or identify source organizations.""",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(thinking_level="high")
+            )
+        )
+        return json.loads(response.text)
+```
+
+| Gemini Capability | FOI Application |
+|:------------------|:----------------|
+| Deep reasoning | Extract generalizable patterns |
+| Structured output | Standardized federation format |
+| Code execution | Privacy validation checks |
+
+### Novel Concepts Summary
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              A2I2 NOVEL CONCEPTS × GEMINI CAPABILITIES                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   CONCEPT              PRIMARY GEMINI FEATURES                              │
+│   ═══════              ═══════════════════════                              │
+│                                                                              │
+│   CAP (Cognitive       • Structured JSON output for schemas                 │
+│   Architecture         • 1M context for large knowledge graphs              │
+│   Protocol)            • Code execution for schema validation               │
+│                                                                              │
+│   DTM (Digital         • Deep reasoning for cognitive pattern analysis      │
+│   Twin Modeling)       • Video analysis for behavioral patterns             │
+│                        • Thinking levels for analysis depth                 │
+│                                                                              │
+│   ATL (Autonomy        • Code execution for trust calculations              │
+│   Trust Ledger)        • Structured output for audit reports                │
+│                        • Deep reasoning for outcome analysis                │
+│                                                                              │
+│   VNKG (Voice-Native   • Live API for real-time voice                       │
+│   Knowledge Graph)     • Affective dialog for emotion awareness             │
+│                        • 8 TTS voices for natural speech                    │
+│                                                                              │
+│   IMC (Institutional   • Native video understanding                         │
+│   Memory              • 1M context for long recordings                      │
+│   Crystallization)     • Deep reasoning for tacit knowledge                 │
+│                                                                              │
+│   CoSP (Chief of       • Deep Research for decision support                 │
+│   Staff Protocol)      • Search grounding for real-time intel               │
+│                        • Structured output for protocols                    │
+│                                                                              │
+│   FOI (Federated       • Deep reasoning for pattern extraction              │
+│   Organizational       • Privacy-aware structured output                    │
+│   Intelligence)        • Code execution for validation                      │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Implementation Guide
 
 ### Prerequisites
@@ -1901,6 +2739,399 @@ async for chunk in client.models.generate_content_stream(
 - Rate limits vary by tier
 - Context caching available for large repeated contexts
 - Batch API available for high-volume processing
+
+---
+
+## Context Caching
+
+Context caching reduces cost and latency when repeatedly using the same large context (like system prompts, documents, or knowledge bases).
+
+### When to Use Context Caching
+
+| Scenario | Benefit | Example |
+|:---------|:--------|:--------|
+| Large system prompts | 75% cost reduction on cached tokens | A2I2 persona instructions |
+| Document analysis | Reuse document context across queries | Quarterly report analysis |
+| Knowledge base queries | Cache the knowledge base, vary queries | Repository-augmented responses |
+| Code reviews | Cache the codebase, ask multiple questions | Architecture review sessions |
+
+### Creating a Cache
+
+```python
+from google import genai
+from google.genai import types
+
+client = genai.Client()
+
+# Create a cached context with your large content
+cache = client.caches.create(
+    model="gemini-3-pro-preview",
+    config=types.CreateCachedContentConfig(
+        display_name="a2i2-knowledge-base",
+        system_instruction="You are A2I2, an Enterprise AI Chief of Staff...",
+        contents=[
+            types.Content(
+                role="user",
+                parts=[types.Part(text=large_knowledge_base_content)]
+            )
+        ],
+        ttl="3600s"  # Cache for 1 hour
+    )
+)
+
+print(f"Created cache: {cache.name}")
+print(f"Token count: {cache.usage_metadata.total_token_count}")
+```
+
+### Using a Cached Context
+
+```python
+# Use the cache for queries (much lower cost for cached portion)
+response = client.models.generate_content(
+    model="gemini-3-pro-preview",
+    contents="What are the key decisions from last quarter?",
+    config=types.GenerateContentConfig(
+        cached_content=cache.name,
+        thinking_config=types.ThinkingConfig(thinking_level="high")
+    )
+)
+
+print(response.text)
+```
+
+### A2I2 Knowledge Repository Caching
+
+```python
+class A2I2CachedKnowledge:
+    """Use context caching for efficient knowledge repository queries."""
+
+    def __init__(self):
+        self.client = genai.Client()
+        self.repo = KnowledgeRepository()
+        self.active_cache = None
+
+    def create_knowledge_cache(self, memory_types: list = None) -> str:
+        """
+        Create a cache from current knowledge repository contents.
+        Dramatically reduces cost for repeated queries.
+        """
+        if memory_types is None:
+            memory_types = ["semantic", "episodic", "procedural"]
+
+        # Gather relevant knowledge
+        knowledge_context = []
+        for mem_type in memory_types:
+            memories = self.repo.recall_all(memory_type=mem_type, limit=100)
+            for mem in memories:
+                knowledge_context.append(f"[{mem_type.upper()}] {mem.get('summary', mem.get('content', ''))}")
+
+        context_str = "\n".join(knowledge_context)
+
+        # Create the cache
+        self.active_cache = self.client.caches.create(
+            model="gemini-3-flash-preview",
+            config=types.CreateCachedContentConfig(
+                display_name="a2i2-session-knowledge",
+                system_instruction="""You are A2I2, an Enterprise AI Chief of Staff.
+                Use the knowledge repository context to answer questions accurately.
+                Always cite which memory type (semantic, episodic, procedural) your answer comes from.""",
+                contents=[
+                    types.Content(
+                        role="user",
+                        parts=[types.Part(text=f"Knowledge Repository:\n{context_str}")]
+                    )
+                ],
+                ttl="7200s"  # 2 hour session
+            )
+        )
+
+        return self.active_cache.name
+
+    def query_with_cache(self, query: str) -> str:
+        """Query using the cached knowledge (low cost)."""
+        if not self.active_cache:
+            self.create_knowledge_cache()
+
+        response = self.client.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=query,
+            config=types.GenerateContentConfig(
+                cached_content=self.active_cache.name
+            )
+        )
+        return response.text
+
+    def refresh_cache_if_needed(self, changes_since_cache: int) -> bool:
+        """Refresh cache if significant knowledge changes occurred."""
+        if changes_since_cache > 10:  # Threshold for refresh
+            self.client.caches.delete(self.active_cache.name)
+            self.create_knowledge_cache()
+            return True
+        return False
+```
+
+### Cache Pricing
+
+| Token Type | Normal Price | Cached Price | Savings |
+|:-----------|:-------------|:-------------|:--------|
+| Input (Gemini 3 Pro) | $2-4/1M | $0.50-1/1M | 75% |
+| Input (Gemini 3 Flash) | $0.50/1M | $0.125/1M | 75% |
+
+---
+
+## Batch API
+
+The Batch API enables high-volume processing at 50% reduced cost with 24-hour turnaround.
+
+### When to Use Batch API
+
+| Scenario | Benefit | Example |
+|:---------|:--------|:--------|
+| Bulk document processing | 50% cost reduction | Process quarterly reports |
+| Large-scale analysis | Handle 1000s of requests | Customer feedback analysis |
+| Non-urgent tasks | Lower priority, lower cost | Weekly knowledge synthesis |
+| ETL pipelines | Scheduled batch jobs | Daily memory consolidation |
+
+### Creating a Batch Job
+
+```python
+from google import genai
+from google.genai import types
+
+client = genai.Client()
+
+# Prepare batch requests
+batch_requests = []
+documents = ["doc1.pdf", "doc2.pdf", "doc3.pdf", ...]
+
+for i, doc in enumerate(documents):
+    with open(doc, "rb") as f:
+        batch_requests.append(
+            types.BatchRequest(
+                custom_id=f"doc-{i}",
+                request=types.GenerateContentRequest(
+                    model="gemini-3-pro-preview",
+                    contents=[
+                        types.Part(text="Extract key facts and events from this document."),
+                        types.Part(inline_data=types.Blob(
+                            mime_type="application/pdf",
+                            data=f.read()
+                        ))
+                    ],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        thinking_config=types.ThinkingConfig(thinking_level="high")
+                    )
+                )
+            )
+        )
+
+# Submit the batch
+batch_job = client.batches.create(
+    model="gemini-3-pro-preview",
+    requests=batch_requests,
+    config=types.BatchConfig(
+        display_name="quarterly-document-analysis"
+    )
+)
+
+print(f"Batch job created: {batch_job.name}")
+print(f"Status: {batch_job.state}")
+```
+
+### Monitoring Batch Progress
+
+```python
+import time
+
+# Poll for completion (batches complete within 24 hours)
+while batch_job.state not in ["SUCCEEDED", "FAILED", "CANCELLED"]:
+    time.sleep(300)  # Check every 5 minutes
+    batch_job = client.batches.get(batch_job.name)
+    print(f"Progress: {batch_job.completed_count}/{batch_job.total_count}")
+
+# Get results
+if batch_job.state == "SUCCEEDED":
+    results = client.batches.list_results(batch_job.name)
+    for result in results:
+        print(f"ID: {result.custom_id}")
+        print(f"Result: {result.response.text}")
+```
+
+### A2I2 Batch Knowledge Processing
+
+```python
+class A2I2BatchProcessor:
+    """Batch processing for A2I2 knowledge operations."""
+
+    def __init__(self):
+        self.client = genai.Client()
+        self.repo = KnowledgeRepository()
+
+    def batch_analyze_documents(self, document_paths: list) -> str:
+        """
+        Analyze multiple documents in batch for cost efficiency.
+        Returns batch job name for tracking.
+        """
+        batch_requests = []
+
+        for i, path in enumerate(document_paths):
+            with open(path, "rb") as f:
+                content = f.read()
+                mime_type = self._get_mime_type(path)
+
+            batch_requests.append(
+                types.BatchRequest(
+                    custom_id=f"doc-{i}-{path}",
+                    request=types.GenerateContentRequest(
+                        model="gemini-3-pro-preview",
+                        contents=[
+                            types.Part(text="""Extract knowledge for A2I2 repository:
+                            1. facts: Key semantic facts
+                            2. events: Important episodic events with dates
+                            3. workflows: Procedural patterns
+                            4. entities: People, orgs, and relationships
+
+                            Format as JSON."""),
+                            types.Part(inline_data=types.Blob(
+                                mime_type=mime_type,
+                                data=content
+                            ))
+                        ],
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            thinking_config=types.ThinkingConfig(thinking_level="high")
+                        )
+                    )
+                )
+            )
+
+        batch_job = self.client.batches.create(
+            model="gemini-3-pro-preview",
+            requests=batch_requests,
+            config=types.BatchConfig(
+                display_name=f"a2i2-batch-{datetime.now().isoformat()}"
+            )
+        )
+
+        return batch_job.name
+
+    async def process_batch_results(self, batch_name: str):
+        """Process completed batch results into knowledge repository."""
+        batch_job = self.client.batches.get(batch_name)
+
+        if batch_job.state != "SUCCEEDED":
+            raise ValueError(f"Batch not ready: {batch_job.state}")
+
+        results = self.client.batches.list_results(batch_name)
+
+        for result in results:
+            extracted = json.loads(result.response.text)
+
+            # Store to appropriate memory types
+            for fact in extracted.get("facts", []):
+                self.repo.learn("semantic", {
+                    "type": "batch_extracted_fact",
+                    "content": fact,
+                    "source": result.custom_id,
+                    "batch_job": batch_name
+                })
+
+            for event in extracted.get("events", []):
+                self.repo.learn("episodic", {
+                    "type": "batch_extracted_event",
+                    "content": event,
+                    "source": result.custom_id
+                })
+
+            for workflow in extracted.get("workflows", []):
+                self.repo.learn("procedural", {
+                    "type": "batch_extracted_workflow",
+                    "content": workflow,
+                    "source": result.custom_id
+                })
+
+            for entity in extracted.get("entities", []):
+                self.repo.relate(
+                    source=entity.get("name"),
+                    relationship=entity.get("relationship", "extracted_from"),
+                    target=result.custom_id
+                )
+
+        return {
+            "processed": len(list(results)),
+            "batch_name": batch_name
+        }
+
+    def schedule_weekly_reflection(self):
+        """
+        Schedule batch job for weekly knowledge synthesis.
+        Runs REFLECT operation on accumulated knowledge.
+        """
+        # Get all memories from past week
+        recent_memories = self.repo.recall_recent(days=7)
+
+        batch_requests = [
+            types.BatchRequest(
+                custom_id="weekly-reflection",
+                request=types.GenerateContentRequest(
+                    model="gemini-3-pro-preview",
+                    contents=f"""Perform weekly REFLECT operation on this knowledge:
+
+                    {json.dumps(recent_memories)}
+
+                    Synthesize:
+                    1. patterns: Recurring themes
+                    2. anomalies: Unusual events
+                    3. trends: Directional changes
+                    4. recommendations: Suggested actions
+                    5. contradictions: Conflicts to resolve
+
+                    Format as JSON with confidence scores.""",
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        thinking_config=types.ThinkingConfig(thinking_level="high")
+                    )
+                )
+            )
+        ]
+
+        batch_job = self.client.batches.create(
+            model="gemini-3-pro-preview",
+            requests=batch_requests,
+            config=types.BatchConfig(
+                display_name=f"a2i2-weekly-reflection-{datetime.now().strftime('%Y-%W')}"
+            )
+        )
+
+        return batch_job.name
+
+    def _get_mime_type(self, path: str) -> str:
+        """Get MIME type from file extension."""
+        ext = path.lower().split(".")[-1]
+        mime_map = {
+            "pdf": "application/pdf",
+            "doc": "application/msword",
+            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "txt": "text/plain",
+            "md": "text/markdown",
+            "json": "application/json",
+            "mp4": "video/mp4",
+            "mp3": "audio/mpeg",
+            "png": "image/png",
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg"
+        }
+        return mime_map.get(ext, "application/octet-stream")
+```
+
+### Batch Pricing
+
+| Model | Normal Output | Batch Output | Savings |
+|:------|:--------------|:-------------|:--------|
+| Gemini 3 Pro | $12-18/1M | $6-9/1M | 50% |
+| Gemini 3 Flash | $3/1M | $1.50/1M | 50% |
+| Gemini 2.5 Flash | $0.60/1M | $0.30/1M | 50% |
 
 ---
 

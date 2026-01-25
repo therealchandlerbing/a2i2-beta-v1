@@ -344,34 +344,59 @@
       "rules": [
         {
           "condition": "task.type === 'image_generation'",
-          "model": "gemini-3-pro-image-preview"
+          "model": "gemini-3-pro-image-preview",
+          "fallback": "gemini-2.5-flash-image"
         },
         {
           "condition": "task.needsCurrentInfo === true",
           "model": "gemini-3-flash-preview",
-          "config": { "tools": ["google_search"] }
+          "config": { "tools": ["google_search"] },
+          "fallback": "gemini-2.5-flash"
         },
         {
           "condition": "task.contextSize > 200000",
-          "model": "gemini-3-pro-preview"
+          "model": "gemini-3-pro-preview",
+          "fallback": "gemini-2.5-pro"
         },
         {
           "condition": "task.type === 'vision' && task.complexity === 'high'",
-          "model": "gemini-3-pro-preview"
+          "model": "gemini-3-pro-preview",
+          "fallback": "gemini-3-flash-preview"
         },
         {
           "condition": "task.latency === 'fast'",
-          "model": "gemini-2.5-flash"
+          "model": "gemini-2.5-flash",
+          "fallback": "gemini-2.5-flash-lite"
         },
         {
           "condition": "task.type === 'research' && task.depth === 'comprehensive'",
-          "model": "deep-research-pro-preview-12-2025"
+          "model": "deep-research-pro-preview-12-2025",
+          "fallback": "gemini-3-pro-preview"
+        },
+        {
+          "condition": "task.type === 'voice' && task.latency === 'realtime'",
+          "model": "gemini-2.5-flash-native-audio-preview-12-2025",
+          "fallback": "personaplex"
+        },
+        {
+          "condition": "task.type === 'tts'",
+          "model": "gemini-2.5-flash-preview-tts",
+          "fallback": "gemini-2.5-pro-preview-tts"
         },
         {
           "condition": "default",
-          "model": "gemini-3-flash-preview"
+          "model": "gemini-3-flash-preview",
+          "fallback": "gemini-2.5-flash"
         }
-      ]
+      ],
+      "fallbackStrategy": {
+        "description": "Strategy for handling model failures",
+        "onRateLimit": "fallback",
+        "onError": "fallback",
+        "onTimeout": "retry_then_fallback",
+        "maxRetries": 3,
+        "retryDelayMs": 1000
+      }
     },
     "knowledgeOperations": {
       "documentAnalysis": {
