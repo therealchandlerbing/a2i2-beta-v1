@@ -375,13 +375,26 @@
         },
         {
           "condition": "task.type === 'voice' && task.latency === 'realtime'",
+          "model": "personaplex",
+          "fallback": "gemini-2.5-flash-native-audio-preview-12-2025",
+          "note": "PersonaPlex is PRIMARY for voice - best latency and full duplex"
+        },
+        {
+          "condition": "task.type === 'voice' && task.needsReasoning === true",
           "model": "gemini-2.5-flash-native-audio-preview-12-2025",
-          "fallback": "personaplex"
+          "fallback": "personaplex",
+          "note": "Gemini Live when voice needs integrated reasoning/search"
+        },
+        {
+          "condition": "task.type === 'tts' && task.quality === 'premium'",
+          "model": "gemini-2.5-pro-preview-tts",
+          "fallback": "gemini-2.5-flash-preview-tts"
         },
         {
           "condition": "task.type === 'tts'",
-          "model": "gemini-2.5-flash-preview-tts",
-          "fallback": "gemini-2.5-pro-preview-tts"
+          "model": "personaplex",
+          "fallback": "gemini-2.5-flash-preview-tts",
+          "note": "PersonaPlex preferred for TTS in most cases"
         },
         {
           "condition": "default",

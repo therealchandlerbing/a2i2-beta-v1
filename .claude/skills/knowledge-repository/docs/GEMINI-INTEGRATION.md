@@ -196,7 +196,9 @@ Gemini models power multiple layers of A2I2's intelligence, from core reasoning 
 
 ### Voice Integration Architecture
 
-A2I2 supports two voice providers, each optimized for different use cases:
+**PRIMARY VOICE PROVIDER: NVIDIA PersonaPlex**
+
+A2I2 uses **NVIDIA PersonaPlex as the PRIMARY voice provider** for its superior latency (170ms) and full-duplex capabilities. Gemini voice models complement PersonaPlex for specific scenarios requiring integrated reasoning or search grounding:
 
 ```
 ╔════════════════════════════════════════════════════════════════════════════════╗
@@ -1982,6 +1984,8 @@ Code:
 | Natural conversation | Claude | More nuanced, empathetic |
 | Code analysis | Gemini 3 Pro | Code execution capability |
 | Quick responses | Gemini 3 Flash (minimal) | Lowest latency |
+| **Voice (PRIMARY)** | **PersonaPlex** | **170ms latency, full duplex, 16 personas** |
+| Voice + reasoning | Gemini Live API | When voice needs integrated search/reasoning |
 
 ### Latency Benchmarks
 
