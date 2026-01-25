@@ -1464,11 +1464,15 @@ class GeminiFOI:
 
 ### Prerequisites
 
+> **SDK Note**: This documentation uses `google-genai`, Google's unified GenAI SDK (released late 2024).
+> This is different from the older `google-generativeai` package. The new SDK uses `genai.Client()`
+> instead of `genai.configure()`.
+
 ```bash
-# Install Google GenAI SDK
+# Install Google GenAI SDK (unified SDK, not google-generativeai)
 pip install google-genai
 
-# Set API key
+# Set API key (the SDK reads from this environment variable automatically)
 export GEMINI_API_KEY="your-api-key"
 ```
 

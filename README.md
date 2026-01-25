@@ -1088,20 +1088,25 @@ Create visuals with Gemini 3 Pro Image:
 # Set your API key
 export GEMINI_API_KEY="your-api-key"
 
-# Install the SDK
+# Install the SDK (google-genai is Google's unified GenAI SDK, released 2024)
+# Note: This is different from the older google-generativeai package
 pip install google-genai
 ```
 
 ```python
 from google import genai
+from google.genai import types
 
+# Initialize client (uses GEMINI_API_KEY environment variable)
 client = genai.Client()
 
 # Use Gemini with search grounding
 response = client.models.generate_content(
     model="gemini-3-flash-preview",
     contents="What are the latest developments in AI?",
-    config={"tools": [{"google_search": {}}]}
+    config=types.GenerateContentConfig(
+        tools=[{"google_search": {}}]
+    )
 )
 
 print(response.text)

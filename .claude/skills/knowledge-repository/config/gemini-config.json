@@ -519,7 +519,7 @@
   },
 
   "rateLimits": {
-    "description": "API rate limits vary by tier and model",
+    "description": "API rate limits vary by tier and model. Use null to indicate unlimited or custom values.",
     "tiers": {
       "free": {
         "requestsPerMinute": 10,
@@ -529,24 +529,26 @@
       "payAsYouGo": {
         "requestsPerMinute": 1000,
         "tokensPerMinute": 4000000,
-        "requestsPerDay": "unlimited"
+        "requestsPerDay": null,
+        "requestsPerDayNote": "unlimited"
       },
       "enterprise": {
-        "requestsPerMinute": "custom",
-        "tokensPerMinute": "custom",
-        "requestsPerDay": "unlimited",
-        "note": "Contact Google for enterprise limits"
+        "requestsPerMinute": null,
+        "tokensPerMinute": null,
+        "requestsPerDay": null,
+        "note": "Contact Google for custom enterprise limits"
       }
     },
     "modelSpecific": {
       "deepResearch": {
         "concurrentJobs": 5,
-        "maxDuration": "60 minutes",
+        "maxDurationMinutes": 60,
         "note": "Deep Research has separate rate limits"
       },
       "liveApi": {
         "concurrentSessions": 10,
-        "maxSessionDuration": "unlimited with proper keep-alive",
+        "maxSessionDuration": null,
+        "maxSessionDurationNote": "unlimited with proper keep-alive",
         "note": "Live API uses WebSocket connections"
       }
     }
