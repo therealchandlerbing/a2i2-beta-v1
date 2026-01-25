@@ -30,10 +30,8 @@ Usage:
     )
 """
 
-import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-from enum import Enum
 
 from knowledge_operations import (
     KnowledgeRepository,
@@ -41,8 +39,6 @@ from knowledge_operations import (
     PatternOutcome,
     TaskComplexity,
     ToolInvocation,
-    SourceType,
-    KnowledgeSource
 )
 
 
@@ -122,7 +118,7 @@ MODEL_REGISTRY: Dict[str, ModelConfig] = {
         best_for=["fast_responses", "simple_tasks", "high_volume"]
     ),
     "gemini-3-pro": ModelConfig(
-        id="gemini-3-pro-preview",
+        id="gemini-3-pro",
         name="Gemini 3 Pro",
         provider="google",
         cost_per_1k_input=0.002,
@@ -134,7 +130,7 @@ MODEL_REGISTRY: Dict[str, ModelConfig] = {
         best_for=["complex_reasoning", "large_context", "agentic"]
     ),
     "gemini-3-flash": ModelConfig(
-        id="gemini-3-flash-preview",
+        id="gemini-3-flash",
         name="Gemini 3 Flash",
         provider="google",
         cost_per_1k_input=0.0005,

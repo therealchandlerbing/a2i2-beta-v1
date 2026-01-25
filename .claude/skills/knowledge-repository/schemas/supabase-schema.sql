@@ -658,10 +658,12 @@ CREATE TABLE IF NOT EXISTS arcus_user_preference_vectors (
     user_id TEXT DEFAULT 'default',
     context_name TEXT NOT NULL,              -- e.g., "default", "confidential_data", "time_critical"
 
-    -- Objective weights (sum to 1.0)
+    -- Objective weights (should sum to 1.0 for normalized scoring)
     accuracy_weight FLOAT DEFAULT 0.5 CHECK (accuracy_weight >= 0 AND accuracy_weight <= 1),
     cost_weight FLOAT DEFAULT 0.3 CHECK (cost_weight >= 0 AND cost_weight <= 1),
     latency_weight FLOAT DEFAULT 0.2 CHECK (latency_weight >= 0 AND latency_weight <= 1),
+    -- Note: Sum constraint enforced at application level for flexibility
+    CONSTRAINT weights_sum_check CHECK (accuracy_weight + cost_weight + latency_weight BETWEEN 0.99 AND 1.01),
 
     -- Model preferences (0.0 = avoid, 1.0 = strongly prefer)
     model_preferences JSONB DEFAULT '{

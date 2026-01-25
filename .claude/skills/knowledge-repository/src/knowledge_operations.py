@@ -935,7 +935,7 @@ class KnowledgeRepository:
         self,
         context_name: str = "default",
         user_id: str = "default"
-    ) -> Optional[UserPreferenceVectorEntry]:
+    ) -> UserPreferenceVectorEntry:
         """
         Get the active preference vector for a user/context.
 
@@ -944,7 +944,7 @@ class KnowledgeRepository:
             user_id: User ID
 
         Returns:
-            Preference vector or None
+            Preference vector (defaults provided if not found in database)
         """
         if not self.supabase:
             # Return default

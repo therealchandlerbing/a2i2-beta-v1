@@ -1,7 +1,7 @@
 # ToolOrchestra Review: Lessons for A2I2
 
 **Document Type**: Strategic Technical Review
-**Source**: [NVIDIA ToolOrchestra](https://github.com/NVlabs/ToolOrchestra) | [Paper](https://arxiv.org/abs/2511.21689)
+**Source**: [NVIDIA ToolOrchestra](https://github.com/NVlabs/ToolOrchestra) | [Paper](https://arxiv.org/abs/2505.21689)
 **Reviewed**: 2026-01-25
 **Updated**: 2026-01-25 (Gemini Integration Analysis)
 **Purpose**: Identify enhancement opportunities for A2I2 Enterprise AI Chief of Staff
