@@ -223,7 +223,7 @@ Customize routing behavior per user and context:
 
 ---
 
-## Skill Orchestration Layer *(NEW - Phase 2)*
+## Skill Orchestration Layer *(Phase 2)*
 
 The skill orchestration layer coordinates multiple skills with intelligent context management.
 
@@ -288,7 +288,7 @@ print(f"Context tokens: {result.context_assembled.total_tokens}")
 
 ---
 
-## Dynamic Context Budgeting *(NEW - Phase 2)*
+## Dynamic Context Budgeting *(Phase 2)*
 
 Intelligent context management that maximizes knowledge injection within model limits.
 
@@ -364,6 +364,256 @@ print(f"Items dropped: {packed.dropped_items}")
 
 ---
 
+## Normalized Reward Signals *(NEW - Phase 3)*
+
+The reward signals system provides normalized metrics for skill optimization, enabling learning from outcomes.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      REWARD SIGNAL COMPUTATION                               │
+│                                                                              │
+│   Skill Execution                                                            │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │  skill: knowledge_repository                                     │       │
+│   │  capability: recall                                              │       │
+│   │  cost: $0.0012  latency: 850ms  tokens: 1200                    │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                  REWARD CALCULATOR                               │       │
+│   │                                                                   │       │
+│   │   Accuracy Component:  0.85 × 0.5 (weight) = 0.425              │       │
+│   │   Cost Component:      normalized(-0.12) × 0.3 = -0.036         │       │
+│   │   Latency Component:   normalized(-0.08) × 0.2 = -0.016         │       │
+│   │   Preference Bonus:    model_match × 0.1 = 0.08                 │       │
+│   │   Correction Penalty:  none = 0.0                                │       │
+│   │   ─────────────────────────────────────────────────             │       │
+│   │   Raw Reward: 0.453                                              │       │
+│   │   Normalized: 0.71 (relative to batch)                          │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Running Normalization** | Cost/latency normalized with running mean/std for batch comparison |
+| **Preference Bonus** | Reward boost when using user's preferred models |
+| **Correction Penalty** | Penalty applied when user corrections are needed |
+| **Weighted Components** | User-configurable weights for accuracy/cost/latency |
+
+### Quick Example
+
+```python
+from reward_signals import RewardCalculator
+
+calculator = RewardCalculator()
+
+# Create a skill trajectory
+trajectory = SkillTrajectory(
+    skill_name="knowledge_repository",
+    capability="recall",
+    total_cost_usd=0.0012,
+    total_latency_ms=850,
+    model_used="claude-sonnet"
+)
+
+# Compute reward from outcome
+outcome = Outcome(
+    success=True,
+    accuracy_score=0.85,
+    required_correction=False
+)
+
+signal = calculator.create_reward_signal(
+    trajectory=trajectory,
+    outcome=outcome,
+    user_preferences=preferences
+)
+
+print(f"Raw reward: {signal.raw_reward:.3f}")
+print(f"Normalized: {signal.normalized_reward:.3f}")
+```
+
+---
+
+## Synthetic Data Generation *(NEW - Phase 3)*
+
+Generate training and evaluation data for skill optimization with domain-specific tasks.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    SYNTHETIC DATA GENERATION                                 │
+│                                                                              │
+│   ┌─────────────────┐                                                       │
+│   │  Domain Config  │                                                       │
+│   │  • enterprise   │                                                       │
+│   │  • technology   │                                                       │
+│   │  • legal        │                                                       │
+│   └────────┬────────┘                                                       │
+│            │                                                                 │
+│            ▼                                                                 │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                    DATA SYNTHESIZER                              │       │
+│   │                                                                   │       │
+│   │   Task Types:     recall, learn, relate, reflect, orchestrate   │       │
+│   │   Complexity:     simple → moderate → complex → expert          │       │
+│   │   Domains:        enterprise, technology, legal, healthcare     │       │
+│   │                                                                   │       │
+│   │   Generates:                                                     │       │
+│   │   • Task description                                             │       │
+│   │   • Expected inputs/outputs                                      │       │
+│   │   • Golden skill sequences                                       │       │
+│   │   • Evaluation criteria                                          │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│            │                                                                 │
+│            ▼                                                                 │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │  Evaluation Dataset                                              │       │
+│   │  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐       │       │
+│   │  │ Task 1    │ │ Task 2    │ │ Task 3    │ │   ...     │       │       │
+│   │  │ recall    │ │ learn     │ │ relate    │ │           │       │       │
+│   │  │ moderate  │ │ simple    │ │ complex   │ │           │       │       │
+│   │  └───────────┘ └───────────┘ └───────────┘ └───────────┘       │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Domain Definitions** | Pre-built domains with entity types, relationships, vocabulary |
+| **Task Templates** | Templates for each task type with expected schemas |
+| **Golden Sequences** | Reference skill sequences for evaluation |
+| **Evaluation Criteria** | Auto-generated accuracy, cost, latency constraints |
+
+### Quick Example
+
+```python
+from data_synthesis import DataSynthesizer
+
+synthesizer = DataSynthesizer()
+
+# Generate tasks for a domain
+tasks = synthesizer.generate_tasks(
+    domain="enterprise",
+    count=50,
+    task_types=["recall", "learn", "relate"]
+)
+
+# Create an evaluation dataset
+dataset = synthesizer.create_evaluation_dataset(
+    name="skill_benchmark_v1",
+    domains=["enterprise", "technology"],
+    examples_per_domain=100,
+    dataset_type="evaluation"
+)
+
+print(f"Tasks: {dataset.task_count}")
+print(f"Complexity distribution: {dataset.complexity_distribution}")
+```
+
+---
+
+## Autonomy Trust Engine *(NEW - Phase 3)*
+
+Progressive trust building with category-based tracking and automatic level transitions.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      AUTONOMY TRUST ENGINE                                   │
+│                                                                              │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                    TRUST BY CATEGORY                             │       │
+│   │                                                                   │       │
+│   │   knowledge_operations:  ████████████░░░░  75%  (Autonomous)    │       │
+│   │   code_operations:       ██████████░░░░░░  62%  (Supervised)    │       │
+│   │   file_operations:       ████████░░░░░░░░  50%  (Supervised)    │       │
+│   │   communication:         ██████░░░░░░░░░░  38%  (Assisted)      │       │
+│   │   system_operations:     ████░░░░░░░░░░░░  25%  (Assisted)      │       │
+│   │                                                                   │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+│   AUTONOMY LEVEL PROGRESSION                                                 │
+│   ┌───────────────────────────────────────────────────────────────┐         │
+│   │  0: Assisted → 1: Supervised → 2: Autonomous → 3: Trusted → 4: Partner  │
+│   │       ▲              ▲                                                   │
+│   │       └──────────────┴── You are here (overall)                         │
+│   └───────────────────────────────────────────────────────────────┘         │
+│                                                                              │
+│   UPGRADE REQUIREMENTS (Supervised → Autonomous)                            │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │  □ Min 50 actions (current: 35/50)                    70%       │       │
+│   │  ■ Success rate > 85% (current: 88%)                  100%      │       │
+│   │  ■ Correction rate < 10% (current: 6%)                100%      │       │
+│   │  □ 10+ action streak (current: 7/10)                  70%       │       │
+│   │  ─────────────────────────────────────────────────────────      │       │
+│   │  Overall progress: 72% complete                                  │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Category-Based Trust** | Separate trust scores for different action categories |
+| **Automatic Upgrades** | Level upgrades when thresholds are met |
+| **Downgrade Triggers** | Automatic demotion on failures or correction spikes |
+| **Boundary Enforcement** | Actions checked against level-appropriate boundaries |
+
+### Autonomy Levels (Enhanced)
+
+| Level | Name | Allowed Actions | Approval Required |
+|-------|------|-----------------|-------------------|
+| 0 | Assisted | Read-only, suggestions | All writes |
+| 1 | Supervised | Read + limited write | Destructive actions |
+| 2 | Autonomous | Standard operations | High-impact only |
+| 3 | Trusted | Extended operations | Critical only |
+| 4 | Partner | Full collaboration | None |
+
+### Quick Example
+
+```python
+from trust_engine import TrustEngine
+
+engine = TrustEngine(user_id="default")
+
+# Record an action outcome
+signal = engine.record_outcome(
+    action_type="file_edit",
+    category="code_operations",
+    success=True,
+    required_correction=False
+)
+
+print(f"Trust delta: {signal.trust_delta:+.3f}")
+print(f"Level: {signal.autonomy_after} ({engine.get_level_name()})")
+
+# Check boundary before action
+allowed, warnings, violations = engine.check_boundary(
+    action_type="git_push",
+    category="code_operations",
+    context={"branch": "main"}
+)
+
+if not allowed:
+    print(f"Action blocked: {violations}")
+
+# Check upgrade eligibility
+next_level = engine.propose_level_upgrade()
+if next_level:
+    print(f"Ready to upgrade to level {next_level}")
+```
+
+---
+
 ## Core Operations
 
 ### LEARN - Capture Knowledge
@@ -430,14 +680,17 @@ Periodic synthesis:
 │   └── TOOLORCHESTRA-REVIEW.md # ToolOrchestra analysis & enhancements
 │
 ├── schemas/
-│   └── supabase-schema.sql     # Database schema (Phase 1 + Phase 2 tables)
+│   └── supabase-schema.sql     # Database schema (Phase 1-3 tables)
 │
 ├── src/
-│   ├── types.ts                # TypeScript type definitions (incl. Phase 2)
+│   ├── types.ts                # TypeScript type definitions (Phase 1-3)
 │   ├── knowledge_operations.py # Core Python operations
 │   ├── model_router.py         # Intelligent model routing
-│   ├── context_budget.py       # Dynamic context budgeting (NEW - Phase 2)
-│   └── skill_orchestrator.py   # Skill orchestration layer (NEW - Phase 2)
+│   ├── context_budget.py       # Dynamic context budgeting (Phase 2)
+│   ├── skill_orchestrator.py   # Skill orchestration layer (Phase 2)
+│   ├── reward_signals.py       # Normalized reward computation (NEW - Phase 3)
+│   ├── data_synthesis.py       # Synthetic data generation (NEW - Phase 3)
+│   └── trust_engine.py         # Autonomy trust progression (NEW - Phase 3)
 │
 ├── config/
 │   └── memory-template.md      # Template for CLAUDE.memory.md
@@ -501,17 +754,21 @@ Currently starting at Level 0, building trust through successful interactions.
 - Multi-skill execution coordination
 - Context packing with quality ranking
 
-### Phase 3: Intelligence (Planned)
-- Vector embeddings for semantic search
-- Digital Twin Modeling (DTM)
-- Autonomy Trust Ledger enhancements
-- Pattern detection and recommendations
+### Phase 3: Intelligence (Completed)
+- **Normalized Reward Signals** - Reward computation for skill optimization
+- **Synthetic Data Generation** - Training/evaluation data with golden sequences
+- **Autonomy Trust Engine** - Category-based trust with automatic level transitions
+- Running normalization for batch comparison
+- Domain definitions for enterprise, technology, legal, healthcare
+- Boundary enforcement and downgrade triggers
 
 ### Phase 4: Voice & Autonomy (Planned)
 - Real-time voice interface via PersonaPlex
 - Voice-Native Knowledge Graph (VNKG)
+- Digital Twin Modeling (DTM)
 - Proactive task execution
 - Federated organizational intelligence
+- Vector embeddings for semantic search
 
 ## Configuration
 
@@ -569,6 +826,27 @@ Located at repository root, this file:
 - Ensure feedback is being provided
 
 ## Version History
+
+### v1.3.0 (2026-01-25) - Phase 3: Intelligence
+- **Normalized Reward Signals** - Reward computation system for skill trajectory optimization
+- **Synthetic Data Generation** - Training and evaluation dataset generation
+- **Autonomy Trust Engine** - Progressive trust building with category-based tracking
+- Running normalization with mean/std tracking for batch comparison
+- Preference bonuses and correction penalties in reward calculation
+- Domain definitions (enterprise, technology, legal, healthcare)
+- Task templates with golden skill sequences
+- Evaluation criteria with validation rules
+- Category-based trust metrics (knowledge, code, file, communication, system, financial, research)
+- Automatic level upgrades when thresholds are met
+- Downgrade triggers for failures and correction spikes
+- Boundary enforcement with approval workflows
+- New `reward_signals.py` for normalized reward computation
+- New `data_synthesis.py` for synthetic data generation
+- New `trust_engine.py` for autonomy trust progression
+- New database tables: `arcus_reward_signals`, `arcus_trust_metrics`, `arcus_autonomy_state`, `arcus_synthetic_datasets`
+- New RPC functions: `update_trust_metrics()`, `update_autonomy_state()`, `get_reward_statistics()`
+- New views: `trust_summary`, `reward_trends`, `skill_reward_performance`
+- Extended TypeScript types for Phase 3 components
 
 ### v1.2.0 (2026-01-25) - Phase 2: Skill Orchestration
 - **Skill Orchestration Layer** - Multi-skill coordination with intelligent planning

@@ -1409,6 +1409,373 @@ INSERT INTO arcus_skills (
 ON CONFLICT (name) DO NOTHING;
 
 -- ============================================================================
+-- PHASE 3: REWARD SIGNALS
+-- Tracks reward signals for skill optimization
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS arcus_reward_signals (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    signal_id TEXT UNIQUE NOT NULL,
+
+    -- Reference
+    trajectory_id TEXT NOT NULL,
+    user_id TEXT DEFAULT 'default',
+    context TEXT,
+
+    -- Reward values
+    total_reward DECIMAL(6, 4) NOT NULL,
+    accuracy_component DECIMAL(6, 4) DEFAULT 0,
+    cost_component DECIMAL(6, 4) DEFAULT 0,
+    latency_component DECIMAL(6, 4) DEFAULT 0,
+    preference_bonus DECIMAL(6, 4) DEFAULT 0,
+    efficiency_bonus DECIMAL(6, 4) DEFAULT 0,
+    correction_penalty DECIMAL(6, 4) DEFAULT 0,
+
+    -- Raw metrics
+    raw_accuracy DECIMAL(6, 4),
+    raw_cost_usd DECIMAL(10, 6),
+    raw_latency_ms INTEGER,
+    raw_tokens INTEGER,
+
+    -- Skills and models used
+    skills_used TEXT[] DEFAULT '{}',
+    models_used TEXT[] DEFAULT '{}',
+
+    -- Outcome info
+    outcome_type TEXT CHECK (outcome_type IN ('success', 'partial', 'failure', 'timeout', 'cancelled')),
+    required_correction BOOLEAN DEFAULT FALSE,
+
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Metadata
+    metadata JSONB DEFAULT '{}'
+);
+
+-- Indexes for reward signals
+CREATE INDEX IF NOT EXISTS idx_reward_trajectory ON arcus_reward_signals(trajectory_id);
+CREATE INDEX IF NOT EXISTS idx_reward_user ON arcus_reward_signals(user_id);
+CREATE INDEX IF NOT EXISTS idx_reward_context ON arcus_reward_signals(context);
+CREATE INDEX IF NOT EXISTS idx_reward_value ON arcus_reward_signals(total_reward DESC);
+CREATE INDEX IF NOT EXISTS idx_reward_created ON arcus_reward_signals(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reward_skills ON arcus_reward_signals USING GIN(skills_used);
+CREATE INDEX IF NOT EXISTS idx_reward_models ON arcus_reward_signals USING GIN(models_used);
+
+COMMENT ON TABLE arcus_reward_signals IS 'Phase 3: Reward signals for skill optimization';
+
+-- ============================================================================
+-- PHASE 3: TRUST METRICS
+-- Tracks trust metrics by category for autonomy progression
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS arcus_trust_metrics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT NOT NULL,
+    category TEXT NOT NULL CHECK (category IN (
+        'read', 'write', 'execute', 'communicate', 'schedule', 'financial', 'system'
+    )),
+
+    -- Counts
+    total_actions INTEGER DEFAULT 0,
+    successful_actions INTEGER DEFAULT 0,
+    corrected_actions INTEGER DEFAULT 0,
+    failed_actions INTEGER DEFAULT 0,
+    overridden_actions INTEGER DEFAULT 0,
+    boundary_violations INTEGER DEFAULT 0,
+
+    -- Computed rates
+    success_rate FLOAT GENERATED ALWAYS AS (
+        CASE WHEN total_actions > 0 THEN successful_actions::FLOAT / total_actions ELSE 0 END
+    ) STORED,
+    correction_rate FLOAT GENERATED ALWAYS AS (
+        CASE WHEN successful_actions > 0 THEN corrected_actions::FLOAT / successful_actions ELSE 0 END
+    ) STORED,
+
+    -- Trust score for this category
+    trust_score FLOAT DEFAULT 0.5 CHECK (trust_score >= 0 AND trust_score <= 1),
+
+    -- Timestamps
+    first_action_at TIMESTAMPTZ,
+    last_action_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Unique per user+category
+    UNIQUE(user_id, category)
+);
+
+-- Indexes for trust metrics
+CREATE INDEX IF NOT EXISTS idx_trust_user ON arcus_trust_metrics(user_id);
+CREATE INDEX IF NOT EXISTS idx_trust_category ON arcus_trust_metrics(category);
+CREATE INDEX IF NOT EXISTS idx_trust_score ON arcus_trust_metrics(trust_score DESC);
+
+COMMENT ON TABLE arcus_trust_metrics IS 'Phase 3: Trust metrics by category';
+
+-- ============================================================================
+-- PHASE 3: AUTONOMY STATE
+-- Tracks overall autonomy state per user
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS arcus_autonomy_state (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT UNIQUE NOT NULL,
+
+    -- Current state
+    overall_trust FLOAT DEFAULT 0.5 CHECK (overall_trust >= 0 AND overall_trust <= 1),
+    current_level INTEGER DEFAULT 0 CHECK (current_level >= 0 AND current_level <= 4),
+    -- 0: Assisted, 1: Supervised, 2: Autonomous, 3: Trusted, 4: Partner
+
+    -- Level change tracking
+    pending_level_upgrade INTEGER,
+    level_history JSONB DEFAULT '[]',
+    last_level_change TIMESTAMPTZ,
+
+    -- Aggregate stats
+    total_actions INTEGER DEFAULT 0,
+    days_at_current_level INTEGER DEFAULT 0,
+
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Metadata
+    metadata JSONB DEFAULT '{}'
+);
+
+-- Indexes for autonomy state
+CREATE INDEX IF NOT EXISTS idx_autonomy_user ON arcus_autonomy_state(user_id);
+CREATE INDEX IF NOT EXISTS idx_autonomy_level ON arcus_autonomy_state(current_level);
+CREATE INDEX IF NOT EXISTS idx_autonomy_trust ON arcus_autonomy_state(overall_trust DESC);
+
+COMMENT ON TABLE arcus_autonomy_state IS 'Phase 3: Autonomy state per user';
+
+-- ============================================================================
+-- PHASE 3: SYNTHETIC DATASETS
+-- Stores generated evaluation datasets
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS arcus_synthetic_datasets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    dataset_id TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+
+    -- Classification
+    dataset_type TEXT NOT NULL CHECK (dataset_type IN (
+        'training', 'validation', 'evaluation', 'benchmark'
+    )),
+    domains TEXT[] DEFAULT '{}',
+
+    -- Contents
+    example_count INTEGER DEFAULT 0,
+    examples JSONB DEFAULT '[]',
+
+    -- Quality metrics
+    avg_difficulty FLOAT,
+    difficulty_distribution JSONB,
+    task_type_distribution JSONB,
+
+    -- Usage tracking
+    usage_count INTEGER DEFAULT 0,
+    last_used TIMESTAMPTZ,
+
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Metadata
+    metadata JSONB DEFAULT '{}'
+);
+
+-- Indexes for synthetic datasets
+CREATE INDEX IF NOT EXISTS idx_dataset_type ON arcus_synthetic_datasets(dataset_type);
+CREATE INDEX IF NOT EXISTS idx_dataset_domains ON arcus_synthetic_datasets USING GIN(domains);
+CREATE INDEX IF NOT EXISTS idx_dataset_created ON arcus_synthetic_datasets(created_at DESC);
+
+COMMENT ON TABLE arcus_synthetic_datasets IS 'Phase 3: Synthetic evaluation datasets';
+
+-- ============================================================================
+-- PHASE 3: RPC FUNCTIONS
+-- ============================================================================
+
+-- Function to update trust metrics atomically
+CREATE OR REPLACE FUNCTION update_trust_metrics(
+    p_user_id TEXT,
+    p_category TEXT,
+    p_success BOOLEAN,
+    p_corrected BOOLEAN,
+    p_failed BOOLEAN,
+    p_overridden BOOLEAN,
+    p_boundary_violation BOOLEAN,
+    p_trust_delta FLOAT
+)
+RETURNS VOID AS $$
+BEGIN
+    INSERT INTO arcus_trust_metrics (
+        user_id, category, total_actions, successful_actions, corrected_actions,
+        failed_actions, overridden_actions, boundary_violations, trust_score,
+        first_action_at, last_action_at
+    ) VALUES (
+        p_user_id, p_category, 1,
+        CASE WHEN p_success THEN 1 ELSE 0 END,
+        CASE WHEN p_corrected THEN 1 ELSE 0 END,
+        CASE WHEN p_failed THEN 1 ELSE 0 END,
+        CASE WHEN p_overridden THEN 1 ELSE 0 END,
+        CASE WHEN p_boundary_violation THEN 1 ELSE 0 END,
+        0.5 + p_trust_delta,
+        NOW(), NOW()
+    )
+    ON CONFLICT (user_id, category) DO UPDATE SET
+        total_actions = arcus_trust_metrics.total_actions + 1,
+        successful_actions = arcus_trust_metrics.successful_actions + CASE WHEN p_success THEN 1 ELSE 0 END,
+        corrected_actions = arcus_trust_metrics.corrected_actions + CASE WHEN p_corrected THEN 1 ELSE 0 END,
+        failed_actions = arcus_trust_metrics.failed_actions + CASE WHEN p_failed THEN 1 ELSE 0 END,
+        overridden_actions = arcus_trust_metrics.overridden_actions + CASE WHEN p_overridden THEN 1 ELSE 0 END,
+        boundary_violations = arcus_trust_metrics.boundary_violations + CASE WHEN p_boundary_violation THEN 1 ELSE 0 END,
+        trust_score = GREATEST(0, LEAST(1, arcus_trust_metrics.trust_score + p_trust_delta)),
+        last_action_at = NOW(),
+        updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to update autonomy state
+CREATE OR REPLACE FUNCTION update_autonomy_state(
+    p_user_id TEXT,
+    p_overall_trust FLOAT,
+    p_level_change INTEGER DEFAULT NULL
+)
+RETURNS VOID AS $$
+BEGIN
+    INSERT INTO arcus_autonomy_state (user_id, overall_trust, current_level, total_actions)
+    VALUES (p_user_id, p_overall_trust, 0, 1)
+    ON CONFLICT (user_id) DO UPDATE SET
+        overall_trust = p_overall_trust,
+        current_level = COALESCE(p_level_change, arcus_autonomy_state.current_level),
+        total_actions = arcus_autonomy_state.total_actions + 1,
+        last_level_change = CASE WHEN p_level_change IS NOT NULL THEN NOW() ELSE arcus_autonomy_state.last_level_change END,
+        updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to compute reward statistics
+CREATE OR REPLACE FUNCTION get_reward_statistics(
+    p_user_id TEXT DEFAULT NULL,
+    p_context TEXT DEFAULT NULL,
+    p_days INTEGER DEFAULT 30
+)
+RETURNS TABLE(
+    avg_reward FLOAT,
+    min_reward FLOAT,
+    max_reward FLOAT,
+    total_signals INTEGER,
+    avg_accuracy FLOAT,
+    avg_cost_usd FLOAT,
+    top_skills TEXT[],
+    top_models TEXT[]
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        AVG(rs.total_reward)::FLOAT AS avg_reward,
+        MIN(rs.total_reward)::FLOAT AS min_reward,
+        MAX(rs.total_reward)::FLOAT AS max_reward,
+        COUNT(*)::INTEGER AS total_signals,
+        AVG(rs.raw_accuracy)::FLOAT AS avg_accuracy,
+        AVG(rs.raw_cost_usd)::FLOAT AS avg_cost_usd,
+        ARRAY(
+            SELECT unnest(rs2.skills_used)
+            FROM arcus_reward_signals rs2
+            WHERE (p_user_id IS NULL OR rs2.user_id = p_user_id)
+              AND (p_context IS NULL OR rs2.context = p_context)
+              AND rs2.created_at > NOW() - (p_days || ' days')::INTERVAL
+            GROUP BY unnest
+            ORDER BY COUNT(*) DESC
+            LIMIT 5
+        ) AS top_skills,
+        ARRAY(
+            SELECT unnest(rs3.models_used)
+            FROM arcus_reward_signals rs3
+            WHERE (p_user_id IS NULL OR rs3.user_id = p_user_id)
+              AND (p_context IS NULL OR rs3.context = p_context)
+              AND rs3.created_at > NOW() - (p_days || ' days')::INTERVAL
+            GROUP BY unnest
+            ORDER BY COUNT(*) DESC
+            LIMIT 5
+        ) AS top_models
+    FROM arcus_reward_signals rs
+    WHERE (p_user_id IS NULL OR rs.user_id = p_user_id)
+      AND (p_context IS NULL OR rs.context = p_context)
+      AND rs.created_at > NOW() - (p_days || ' days')::INTERVAL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
+-- PHASE 3: VIEWS
+-- ============================================================================
+
+-- View: Trust summary by user
+CREATE OR REPLACE VIEW trust_summary AS
+SELECT
+    ats.user_id,
+    ats.overall_trust,
+    ats.current_level,
+    CASE ats.current_level
+        WHEN 0 THEN 'Assisted'
+        WHEN 1 THEN 'Supervised'
+        WHEN 2 THEN 'Autonomous'
+        WHEN 3 THEN 'Trusted'
+        WHEN 4 THEN 'Partner'
+    END AS level_name,
+    ats.total_actions,
+    ats.days_at_current_level,
+    (
+        SELECT json_agg(json_build_object(
+            'category', tm.category,
+            'trust_score', tm.trust_score,
+            'success_rate', tm.success_rate,
+            'total_actions', tm.total_actions
+        ))
+        FROM arcus_trust_metrics tm
+        WHERE tm.user_id = ats.user_id
+    ) AS category_metrics
+FROM arcus_autonomy_state ats
+ORDER BY ats.overall_trust DESC;
+
+-- View: Reward trends
+CREATE OR REPLACE VIEW reward_trends AS
+SELECT
+    DATE_TRUNC('day', created_at) AS day,
+    COUNT(*) AS signal_count,
+    AVG(total_reward) AS avg_reward,
+    AVG(raw_accuracy) AS avg_accuracy,
+    AVG(raw_cost_usd) AS avg_cost,
+    AVG(raw_latency_ms) AS avg_latency
+FROM arcus_reward_signals
+WHERE created_at > NOW() - INTERVAL '30 days'
+GROUP BY DATE_TRUNC('day', created_at)
+ORDER BY day DESC;
+
+-- View: Skill reward performance
+CREATE OR REPLACE VIEW skill_reward_performance AS
+SELECT
+    unnest(skills_used) AS skill,
+    COUNT(*) AS usage_count,
+    AVG(total_reward) AS avg_reward,
+    AVG(raw_accuracy) AS avg_accuracy,
+    AVG(raw_cost_usd) AS avg_cost
+FROM arcus_reward_signals
+WHERE created_at > NOW() - INTERVAL '30 days'
+GROUP BY unnest(skills_used)
+ORDER BY avg_reward DESC;
+
+-- ============================================================================
+-- PHASE 3: SEED DATA
+-- ============================================================================
+
+-- Insert default autonomy state
+INSERT INTO arcus_autonomy_state (user_id, overall_trust, current_level)
+VALUES ('default', 0.5, 0)
+ON CONFLICT (user_id) DO NOTHING;
+
+-- ============================================================================
 -- COMPLETION
 -- ============================================================================
 
@@ -1416,4 +1783,4 @@ ON CONFLICT (name) DO NOTHING;
 -- GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 -- GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
-COMMENT ON SCHEMA public IS 'Arcus Knowledge Repository v1.1.0 - Phase 2 Schema (Skill Orchestration + Context Budgeting) - Updated 2026-01-25';
+COMMENT ON SCHEMA public IS 'Arcus Knowledge Repository v1.2.0 - Phase 3 Schema (Reward Signals + Trust Engine + Data Synthesis) - Updated 2026-01-25';

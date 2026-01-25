@@ -1136,3 +1136,524 @@ export interface OrchestrationAnalytics {
   };
   recommendations: string[];
 }
+
+// ============================================================================
+// PHASE 3: REWARD SIGNALS TYPES
+// ============================================================================
+
+export type RewardType = 'task_completion' | 'efficiency' | 'preference_alignment' | 'correction_penalty';
+
+export interface SkillTrajectory {
+  id: UUID;
+  skill_name: string;
+  capability: string;
+  execution_id: string;
+  steps: TrajectoryStep[];
+  total_cost_usd: number;
+  total_latency_ms: number;
+  total_tokens: number;
+  model_used: string;
+  thinking_level?: 'minimal' | 'low' | 'medium' | 'high';
+  created_at: string;
+}
+
+export interface TrajectoryStep {
+  step_id: string;
+  action: string;
+  tool_used?: string;
+  input_tokens: number;
+  output_tokens: number;
+  latency_ms: number;
+  cost_usd: number;
+  success: boolean;
+  timestamp: string;
+}
+
+export interface Outcome {
+  success: boolean;
+  accuracy_score: number;
+  user_satisfaction?: number;
+  required_correction: boolean;
+  correction_severity?: 'minor' | 'moderate' | 'major';
+  task_completed: boolean;
+  partial_completion?: number;
+  error_type?: string;
+  feedback?: string;
+}
+
+export interface RewardBreakdown {
+  accuracy_component: number;
+  cost_component: number;
+  latency_component: number;
+  preference_bonus: number;
+  correction_penalty: number;
+  raw_reward: number;
+  normalized_reward: number;
+  weights_used: {
+    accuracy_weight: number;
+    cost_weight: number;
+    latency_weight: number;
+  };
+}
+
+export interface RewardSignal {
+  id: UUID;
+  trajectory_id: UUID;
+  skill_name: string;
+  capability: string;
+  execution_id: string;
+
+  // Outcome data
+  outcome_success: boolean;
+  accuracy_score: number;
+  task_completed: boolean;
+  required_correction: boolean;
+  correction_severity?: 'minor' | 'moderate' | 'major';
+
+  // Cost/latency data
+  cost_usd: number;
+  latency_ms: number;
+  tokens_used: number;
+  model_used?: string;
+
+  // Reward computation
+  accuracy_component: number;
+  cost_component: number;
+  latency_component: number;
+  preference_bonus: number;
+  correction_penalty: number;
+  raw_reward: number;
+  normalized_reward: number;
+
+  // Normalization stats
+  cost_mean?: number;
+  cost_std?: number;
+  latency_mean?: number;
+  latency_std?: number;
+
+  // Weights
+  accuracy_weight: number;
+  cost_weight: number;
+  latency_weight: number;
+
+  // Context
+  user_id?: string;
+  session_id?: string;
+  preference_context?: string;
+
+  created_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface RewardStatistics {
+  skill_name: string;
+  total_signals: number;
+  avg_reward: number;
+  min_reward: number;
+  max_reward: number;
+  std_reward: number;
+  success_rate: number;
+  correction_rate: number;
+  avg_cost_usd: number;
+  avg_latency_ms: number;
+}
+
+// ============================================================================
+// PHASE 3: SYNTHETIC DATA GENERATION TYPES
+// ============================================================================
+
+export type TaskType = 'recall' | 'learn' | 'relate' | 'reflect' | 'orchestrate' | 'route';
+
+export type ComplexityLevel = 'simple' | 'moderate' | 'complex' | 'expert';
+
+export type DatasetType = 'training' | 'validation' | 'test' | 'evaluation';
+
+export interface DomainDefinition {
+  name: string;
+  description: string;
+  entity_types: string[];
+  relationship_types: string[];
+  common_tasks: string[];
+  vocabulary: string[];
+  complexity_factors: string[];
+}
+
+export interface TaskTemplate {
+  task_type: TaskType;
+  description_template: string;
+  input_schema: Record<string, unknown>;
+  expected_output_schema: Record<string, unknown>;
+  complexity_factors: string[];
+  golden_sequence?: GoldenSkillStep[];
+}
+
+export interface GoldenSkillStep {
+  skill: string;
+  capability: string;
+  order: number;
+  expected_inputs: Record<string, unknown>;
+  expected_output_type: string;
+  alternatives?: string[];
+}
+
+export interface SyntheticTask {
+  id: UUID;
+  task_type: TaskType;
+  complexity: ComplexityLevel;
+  domain: string;
+  description: string;
+  inputs: Record<string, unknown>;
+  expected_output: Record<string, unknown>;
+  golden_skill_sequence: GoldenSkillStep[];
+  evaluation_criteria: EvaluationCriteria;
+  generated_at: string;
+  generator_version: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface EvaluationCriteria {
+  required_skills: string[];
+  expected_accuracy: number;
+  max_allowed_cost_usd: number;
+  max_allowed_latency_ms: number;
+  must_include_steps: string[];
+  must_not_include_steps: string[];
+  output_validation_rules: ValidationRule[];
+}
+
+export interface ValidationRule {
+  field: string;
+  rule_type: 'exists' | 'type' | 'range' | 'pattern' | 'contains' | 'custom';
+  expected: unknown;
+  error_message: string;
+}
+
+export interface EvaluationDataset {
+  id: UUID;
+  name: string;
+  description?: string;
+  dataset_type: DatasetType;
+  domains: string[];
+  tasks: SyntheticTask[];
+  task_count: number;
+  complexity_distribution: Record<ComplexityLevel, number>;
+  task_type_distribution: Record<TaskType, number>;
+  created_at: string;
+  updated_at: string;
+  version: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface DatasetSummary {
+  id: UUID;
+  name: string;
+  dataset_type: DatasetType;
+  task_count: number;
+  domains: string[];
+  avg_complexity: number;
+  created_at: string;
+}
+
+export interface GenerationConfig {
+  domain: string;
+  task_types?: TaskType[];
+  complexity_weights?: Record<ComplexityLevel, number>;
+  count: number;
+  include_golden_sequences: boolean;
+  seed?: number;
+}
+
+// ============================================================================
+// PHASE 3: AUTONOMY TRUST ENGINE TYPES
+// ============================================================================
+
+export type TrustCategory =
+  | 'knowledge_operations'
+  | 'code_operations'
+  | 'file_operations'
+  | 'communication'
+  | 'system_operations'
+  | 'financial_operations'
+  | 'research';
+
+export type AutonomyLevelName = 'assisted' | 'supervised' | 'autonomous' | 'trusted' | 'partner';
+
+export interface TrustMetrics {
+  category: TrustCategory;
+  total_actions: number;
+  successful_actions: number;
+  failed_actions: number;
+  corrections_required: number;
+  overrides: number;
+  success_rate: number;
+  correction_rate: number;
+  trust_score: number;
+  confidence: ConfidenceLevel;
+  last_action?: string;
+  last_success?: string;
+  last_failure?: string;
+  streak_current: number;
+  streak_best: number;
+}
+
+export interface TrustThresholds {
+  min_actions: number;
+  min_success_rate: number;
+  max_correction_rate: number;
+  min_streak: number;
+  required_categories: TrustCategory[];
+  time_at_level_days?: number;
+}
+
+export interface AutonomyLevelConfig {
+  level: AutonomyLevel;
+  name: AutonomyLevelName;
+  description: string;
+  allowed_categories: TrustCategory[];
+  requires_approval: TrustCategory[];
+  max_impact: 'low' | 'medium' | 'high' | 'critical';
+  upgrade_thresholds: TrustThresholds;
+  downgrade_triggers: DowngradeTrigger[];
+}
+
+export interface DowngradeTrigger {
+  condition: 'failure_rate' | 'correction_rate' | 'consecutive_failures' | 'user_override';
+  threshold: number;
+  lookback_period?: string;
+  target_level: AutonomyLevel;
+}
+
+export interface TrustRewardSignal {
+  action_type: string;
+  category: TrustCategory;
+  success: boolean;
+  required_correction: boolean;
+  correction_severity?: 'minor' | 'moderate' | 'major';
+  impact_level: 'low' | 'medium' | 'high' | 'critical';
+  trust_delta: number;
+  autonomy_before: AutonomyLevel;
+  autonomy_after: AutonomyLevel;
+  boundaries_checked: string[];
+  boundaries_violated: string[];
+  timestamp: string;
+}
+
+export interface AutonomyState {
+  id: UUID;
+  user_id: string;
+  current_level: AutonomyLevel;
+  level_name: AutonomyLevelName;
+  trust_by_category: Record<TrustCategory, TrustMetrics>;
+  overall_trust_score: number;
+  overall_success_rate: number;
+  overall_correction_rate: number;
+  total_actions: number;
+  level_history: LevelTransition[];
+  upgrade_progress: UpgradeProgress;
+  active_boundaries: Boundary[];
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface LevelTransition {
+  from_level: AutonomyLevel;
+  to_level: AutonomyLevel;
+  reason: string;
+  trigger: 'upgrade' | 'downgrade' | 'manual' | 'reset';
+  timestamp: string;
+  approver_id?: string;
+}
+
+export interface UpgradeProgress {
+  next_level: AutonomyLevel;
+  requirements: TrustThresholds;
+  current_progress: {
+    actions_completed: number;
+    success_rate: number;
+    correction_rate: number;
+    current_streak: number;
+    categories_met: TrustCategory[];
+    days_at_level: number;
+  };
+  percent_complete: number;
+  blocking_factors: string[];
+  estimated_actions_remaining: number;
+}
+
+export interface Boundary {
+  category: TrustCategory;
+  action_pattern: string;
+  min_level_required: AutonomyLevel;
+  requires_approval: boolean;
+  max_impact: 'low' | 'medium' | 'high' | 'critical';
+  description: string;
+  active: boolean;
+}
+
+export interface BoundaryCheckResult {
+  allowed: boolean;
+  boundaries_checked: string[];
+  violations: string[];
+  warnings: string[];
+  required_approval: boolean;
+  approval_reason?: string;
+}
+
+export interface TrustAuditEntry {
+  id: UUID;
+  user_id: string;
+  action_type: string;
+  category: TrustCategory;
+  autonomy_level: AutonomyLevel;
+  success: boolean;
+  required_correction: boolean;
+  correction_type?: 'minor' | 'moderate' | 'major';
+  trust_before: number;
+  trust_after: number;
+  trust_delta: number;
+  boundary_check: BoundaryCheckResult;
+  context_summary?: string;
+  session_id?: string;
+  created_at: string;
+  metadata: Record<string, unknown>;
+}
+
+// ============================================================================
+// PHASE 3: DATABASE RECORD TYPES
+// ============================================================================
+
+export interface RewardSignalRecord {
+  id: UUID;
+  trajectory_id: UUID;
+  skill_name: string;
+  capability: string;
+  execution_id: string;
+  outcome_success: boolean;
+  accuracy_score: number;
+  task_completed: boolean;
+  required_correction: boolean;
+  correction_severity?: string;
+  cost_usd: number;
+  latency_ms: number;
+  tokens_used: number;
+  model_used?: string;
+  accuracy_component: number;
+  cost_component: number;
+  latency_component: number;
+  preference_bonus: number;
+  correction_penalty: number;
+  raw_reward: number;
+  normalized_reward: number;
+  cost_mean?: number;
+  cost_std?: number;
+  latency_mean?: number;
+  latency_std?: number;
+  accuracy_weight: number;
+  cost_weight: number;
+  latency_weight: number;
+  user_id?: string;
+  session_id?: string;
+  preference_context?: string;
+  created_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface TrustMetricsRecord {
+  id: UUID;
+  user_id: string;
+  category: TrustCategory;
+  total_actions: number;
+  successful_actions: number;
+  failed_actions: number;
+  corrections_required: number;
+  overrides: number;
+  trust_score: number;
+  confidence: number;
+  streak_current: number;
+  streak_best: number;
+  last_action?: string;
+  last_success?: string;
+  last_failure?: string;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface AutonomyStateRecord {
+  id: UUID;
+  user_id: string;
+  current_level: AutonomyLevel;
+  overall_trust_score: number;
+  overall_success_rate: number;
+  overall_correction_rate: number;
+  total_actions: number;
+  level_history: LevelTransition[];
+  active_boundaries: Boundary[];
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface SyntheticDatasetRecord {
+  id: UUID;
+  name: string;
+  description?: string;
+  dataset_type: DatasetType;
+  domains: string[];
+  task_count: number;
+  complexity_distribution: Record<string, number>;
+  task_type_distribution: Record<string, number>;
+  tasks_data: SyntheticTask[];
+  version: string;
+  created_at: string;
+  updated_at: string;
+  metadata: Record<string, unknown>;
+}
+
+// ============================================================================
+// PHASE 3: ANALYTICS AND VIEWS
+// ============================================================================
+
+export interface TrustSummary {
+  user_id: string;
+  current_level: AutonomyLevel;
+  level_name: AutonomyLevelName;
+  overall_trust_score: number;
+  total_actions: number;
+  overall_success_rate: number;
+  overall_correction_rate: number;
+  categories_tracked: number;
+  highest_trust_category?: TrustCategory;
+  lowest_trust_category?: TrustCategory;
+  days_at_current_level: number;
+  upgrade_percent_complete: number;
+}
+
+export interface RewardTrend {
+  skill_name: string;
+  period_start: string;
+  period_end: string;
+  signal_count: number;
+  avg_reward: number;
+  reward_trend: 'improving' | 'stable' | 'declining';
+  success_rate: number;
+  correction_rate: number;
+  avg_cost_usd: number;
+  avg_latency_ms: number;
+}
+
+export interface SkillRewardPerformance {
+  skill_name: string;
+  capability: string;
+  total_executions: number;
+  avg_reward: number;
+  best_reward: number;
+  worst_reward: number;
+  success_rate: number;
+  correction_rate: number;
+  avg_cost_usd: number;
+  avg_latency_ms: number;
+  preferred_model?: string;
+  recommendations: string[];
+}
