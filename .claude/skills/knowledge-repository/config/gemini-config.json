@@ -234,7 +234,7 @@
         "description": "Image generation with Flash speed",
         "inputTokenLimit": 65536,
         "outputTokenLimit": 32768,
-        "knowledgeCutoff": "2025-06",
+        "knowledgeCutoff": "2025-01",
         "pricing": {
           "textInput": 0.15,
           "imageOutput": 0.039,
@@ -416,8 +416,8 @@
         "description": "Use Gemini for large document analysis",
         "recommendedModel": "gemini-3-pro-preview",
         "config": {
-          "thinkingLevel": "high",
-          "outputFormat": "json"
+          "thinking_level": "high",
+          "output_format": "json"
         }
       },
       "groundedQuery": {
@@ -425,7 +425,7 @@
         "recommendedModel": "gemini-3-flash-preview",
         "config": {
           "tools": ["google_search"],
-          "thinkingLevel": "high"
+          "thinking_level": "high"
         }
       },
       "visualKnowledge": {

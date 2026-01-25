@@ -1596,13 +1596,13 @@ for part in response.parts:
 ```python
 from google import genai
 from google.genai import types
-import base64
 
 client = genai.Client()
 
 # Analyze documents, images, or video
+# Read binary data directly - no base64 encoding needed
 with open("quarterly_report.pdf", "rb") as f:
-    pdf_data = base64.b64encode(f.read()).decode()
+    pdf_data = f.read()
 
 response = client.models.generate_content(
     model="gemini-3-pro-preview",
@@ -1613,7 +1613,7 @@ response = client.models.generate_content(
                 types.Part(
                     inline_data=types.Blob(
                         mime_type="application/pdf",
-                        data=base64.b64decode(pdf_data),
+                        data=pdf_data,
                     )
                 )
             ]
@@ -2007,7 +2007,7 @@ Code:
 | Claude Sonnet | $3 | $15 | Standard pricing |
 | Gemini 3 Pro | $2-4 | $12-18 | Varies by context length |
 | Gemini 3 Flash | $0.50 | $3 | Best value for speed |
-| Gemini 2.5 Flash | ~$0.10 | ~$0.30 | Ultra-low cost |
+| Gemini 2.5 Flash | $0.15 | $0.60 | Ultra-low cost |
 
 ---
 
@@ -2059,10 +2059,13 @@ Gemini 3 introduces granular control over multimodal vision processing via the `
 ```python
 from google import genai
 from google.genai import types
-import base64
 
 # Note: media_resolution is currently in v1alpha API
 client = genai.Client(http_options={'api_version': 'v1alpha'})
+
+# Read image from file
+with open("document_scan.jpg", "rb") as f:
+    image_data = f.read()
 
 response = client.models.generate_content(
     model="gemini-3-pro-preview",
@@ -2073,7 +2076,7 @@ response = client.models.generate_content(
                 types.Part(
                     inline_data=types.Blob(
                         mime_type="image/jpeg",
-                        data=base64.b64decode("..."),
+                        data=image_data,
                     ),
                     media_resolution={"level": "media_resolution_high"}
                 )
@@ -2081,6 +2084,8 @@ response = client.models.generate_content(
         )
     ]
 )
+
+print(response.text)
 ```
 
 ---

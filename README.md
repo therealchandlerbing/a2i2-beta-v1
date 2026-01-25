@@ -1042,8 +1042,9 @@ Get real-time information from Google Search:
 **Thinking Levels**
 
 Control reasoning depth:
-- `minimal`: Ultra-fast responses
+- `minimal`: Ultra-fast responses (Flash only)
 - `low`: Simple tasks
+- `medium`: Balanced reasoning (Flash only)
 - `high`: Deep analysis (default)
 
 </td>
