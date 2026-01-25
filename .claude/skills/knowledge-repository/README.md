@@ -223,6 +223,624 @@ Customize routing behavior per user and context:
 
 ---
 
+## Skill Orchestration Layer *(Phase 2)*
+
+The skill orchestration layer coordinates multiple skills with intelligent context management.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     SKILL ORCHESTRATION ARCHITECTURE                         │
+│                                                                              │
+│   ┌─────────────┐                                                           │
+│   │    Task     │                                                           │
+│   │  "Research  │                                                           │
+│   │  TechCorp"  │                                                           │
+│   └──────┬──────┘                                                           │
+│          │                                                                   │
+│          ▼                                                                   │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                    SKILL ORCHESTRATOR                            │       │
+│   │  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐       │       │
+│   │  │ Skill         │  │ Context       │  │ Model         │       │       │
+│   │  │ Registry      │  │ Budget        │  │ Router        │       │       │
+│   │  │               │  │ Manager       │  │               │       │       │
+│   │  └───────────────┘  └───────────────┘  └───────────────┘       │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│          │                      │                     │                      │
+│          ▼                      ▼                     ▼                      │
+│   ┌─────────────┐        ┌─────────────┐       ┌─────────────┐              │
+│   │ Knowledge   │        │ Context     │       │ Gemini 3    │              │
+│   │ Repository  │        │ Assembly    │       │ Pro         │              │
+│   │ (recall)    │        │ (pack)      │       │             │              │
+│   └─────────────┘        └─────────────┘       └─────────────┘              │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+| Component | Description |
+|-----------|-------------|
+| **Skill Registry** | Register and discover skills by capability |
+| **Context Budget Manager** | Allocate tokens across memory types |
+| **Skill Executor** | Execute skills with timeout and retry handling |
+| **Outcome Learning** | Record outcomes to improve future orchestration |
+
+### Quick Example
+
+```python
+from skill_orchestrator import SkillOrchestrator
+
+orchestrator = SkillOrchestrator()
+
+# Execute an orchestrated task
+result = await orchestrator.execute(
+    task="Find all information about TechCorp and their preferences",
+    context="research",
+    user_id="default"
+)
+
+print(f"Status: {result.status.value}")
+print(f"Skills executed: {len(result.skill_results)}")
+print(f"Total latency: {result.total_latency_ms}ms")
+print(f"Context tokens: {result.context_assembled.total_tokens}")
+```
+
+---
+
+## Dynamic Context Budgeting *(Phase 2)*
+
+Intelligent context management that maximizes knowledge injection within model limits.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     CONTEXT BUDGET FLOW                                      │
+│                                                                              │
+│   Model Context: 200,000 tokens                                              │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                                                                   │       │
+│   │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌───────────────────┐  │       │
+│   │  │ System  │  │Response │  │Overhead │  │ Available for     │  │       │
+│   │  │ Prompt  │  │ Reserve │  │  (15%)  │  │ Context: 161,000  │  │       │
+│   │  │ 5,000   │  │ 4,000   │  │ 30,000  │  │                   │  │       │
+│   │  └─────────┘  └─────────┘  └─────────┘  └───────────────────┘  │       │
+│   │                                                                   │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+│   Context Allocation:                                                        │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │ Procedural (35%)  │ Semantic (30%)  │ Episodic (25%)  │Graph(10%)│       │
+│   │     56,350        │    48,300       │    40,250       │  16,100  │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+│   Quality Ranking (per item):                                                │
+│   ┌────────────┬────────────┬────────────┬────────────┐                     │
+│   │  Recency   │ Confidence │ Relevance  │ Importance │ = Rank Score        │
+│   │    25%     │    25%     │    25%     │    25%     │                     │
+│   └────────────┴────────────┴────────────┴────────────┘                     │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Ranking Strategies
+
+| Strategy | Description |
+|----------|-------------|
+| **Recency** | Prefer recent items (exponential decay) |
+| **Confidence** | Prefer high-confidence items |
+| **Relevance** | Prefer items matching query |
+| **Importance** | Prefer critical/high-importance items |
+| **Balanced** | Equal weight to all factors |
+
+### Quick Example
+
+```python
+from context_budget import ContextBudgetManager
+
+manager = ContextBudgetManager(model_id="claude-sonnet")
+
+# Allocate budget
+allocation = manager.allocate_budget(
+    base_prompt_tokens=5000,
+    expected_response_tokens=4000,
+    task_context="code_review"
+)
+
+# Pack knowledge within budget
+packed = manager.pack_knowledge(
+    allocation=allocation,
+    semantic_items=facts,
+    procedural_items=preferences,
+    episodic_items=events,
+    query="TypeScript best practices"
+)
+
+# Assemble formatted context
+context = manager.assemble_context(packed, format_style="markdown")
+print(f"Context tokens: {context.total_tokens}")
+print(f"Items selected: {packed.total_items}")
+print(f"Items dropped: {packed.dropped_items}")
+```
+
+---
+
+## Normalized Reward Signals *(NEW - Phase 3)*
+
+The reward signals system provides normalized metrics for skill optimization, enabling learning from outcomes.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      REWARD SIGNAL COMPUTATION                               │
+│                                                                              │
+│   Skill Execution                                                            │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │  skill: knowledge_repository                                     │       │
+│   │  capability: recall                                              │       │
+│   │  cost: $0.0012  latency: 850ms  tokens: 1200                    │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                  REWARD CALCULATOR                               │       │
+│   │                                                                   │       │
+│   │   Accuracy Component:  0.85 × 0.5 (weight) = 0.425              │       │
+│   │   Cost Component:      normalized(-0.12) × 0.3 = -0.036         │       │
+│   │   Latency Component:   normalized(-0.08) × 0.2 = -0.016         │       │
+│   │   Preference Bonus:    model_match × 0.1 = 0.08                 │       │
+│   │   Correction Penalty:  none = 0.0                                │       │
+│   │   ─────────────────────────────────────────────────             │       │
+│   │   Raw Reward: 0.453                                              │       │
+│   │   Normalized: 0.71 (relative to batch)                          │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Running Normalization** | Cost/latency normalized with running mean/std for batch comparison |
+| **Preference Bonus** | Reward boost when using user's preferred models |
+| **Correction Penalty** | Penalty applied when user corrections are needed |
+| **Weighted Components** | User-configurable weights for accuracy/cost/latency |
+
+### Quick Example
+
+```python
+from reward_signals import RewardCalculator
+
+calculator = RewardCalculator()
+
+# Create a skill trajectory
+trajectory = SkillTrajectory(
+    skill_name="knowledge_repository",
+    capability="recall",
+    total_cost_usd=0.0012,
+    total_latency_ms=850,
+    model_used="claude-sonnet"
+)
+
+# Compute reward from outcome
+outcome = Outcome(
+    success=True,
+    accuracy_score=0.85,
+    required_correction=False
+)
+
+signal = calculator.create_reward_signal(
+    trajectory=trajectory,
+    outcome=outcome,
+    user_preferences=preferences
+)
+
+print(f"Raw reward: {signal.raw_reward:.3f}")
+print(f"Normalized: {signal.normalized_reward:.3f}")
+```
+
+---
+
+## Synthetic Data Generation *(NEW - Phase 3)*
+
+Generate training and evaluation data for skill optimization with domain-specific tasks.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    SYNTHETIC DATA GENERATION                                 │
+│                                                                              │
+│   ┌─────────────────┐                                                       │
+│   │  Domain Config  │                                                       │
+│   │  • enterprise   │                                                       │
+│   │  • technology   │                                                       │
+│   │  • legal        │                                                       │
+│   └────────┬────────┘                                                       │
+│            │                                                                 │
+│            ▼                                                                 │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                    DATA SYNTHESIZER                              │       │
+│   │                                                                   │       │
+│   │   Task Types:     recall, learn, relate, reflect, orchestrate   │       │
+│   │   Complexity:     simple → moderate → complex → expert          │       │
+│   │   Domains:        enterprise, technology, legal, healthcare     │       │
+│   │                                                                   │       │
+│   │   Generates:                                                     │       │
+│   │   • Task description                                             │       │
+│   │   • Expected inputs/outputs                                      │       │
+│   │   • Golden skill sequences                                       │       │
+│   │   • Evaluation criteria                                          │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│            │                                                                 │
+│            ▼                                                                 │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │  Evaluation Dataset                                              │       │
+│   │  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐       │       │
+│   │  │ Task 1    │ │ Task 2    │ │ Task 3    │ │   ...     │       │       │
+│   │  │ recall    │ │ learn     │ │ relate    │ │           │       │       │
+│   │  │ moderate  │ │ simple    │ │ complex   │ │           │       │       │
+│   │  └───────────┘ └───────────┘ └───────────┘ └───────────┘       │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Domain Definitions** | Pre-built domains with entity types, relationships, vocabulary |
+| **Task Templates** | Templates for each task type with expected schemas |
+| **Golden Sequences** | Reference skill sequences for evaluation |
+| **Evaluation Criteria** | Auto-generated accuracy, cost, latency constraints |
+
+### Quick Example
+
+```python
+from data_synthesis import DataSynthesizer
+
+synthesizer = DataSynthesizer()
+
+# Generate tasks for a domain
+tasks = synthesizer.generate_tasks(
+    domain="enterprise",
+    count=50,
+    task_types=["recall", "learn", "relate"]
+)
+
+# Create an evaluation dataset
+dataset = synthesizer.create_evaluation_dataset(
+    name="skill_benchmark_v1",
+    domains=["enterprise", "technology"],
+    examples_per_domain=100,
+    dataset_type="evaluation"
+)
+
+print(f"Tasks: {dataset.task_count}")
+print(f"Complexity distribution: {dataset.complexity_distribution}")
+```
+
+---
+
+## Autonomy Trust Engine *(NEW - Phase 3)*
+
+Progressive trust building with category-based tracking and automatic level transitions.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      AUTONOMY TRUST ENGINE                                   │
+│                                                                              │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                    TRUST BY CATEGORY                             │       │
+│   │                                                                   │       │
+│   │   knowledge_operations:  ████████████░░░░  75%  (Autonomous)    │       │
+│   │   code_operations:       ██████████░░░░░░  62%  (Supervised)    │       │
+│   │   file_operations:       ████████░░░░░░░░  50%  (Supervised)    │       │
+│   │   communication:         ██████░░░░░░░░░░  38%  (Assisted)      │       │
+│   │   system_operations:     ████░░░░░░░░░░░░  25%  (Assisted)      │       │
+│   │                                                                   │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+│   AUTONOMY LEVEL PROGRESSION                                                 │
+│   ┌───────────────────────────────────────────────────────────────┐         │
+│   │  0: Assisted → 1: Supervised → 2: Autonomous → 3: Trusted → 4: Partner  │
+│   │       ▲              ▲                                                   │
+│   │       └──────────────┴── You are here (overall)                         │
+│   └───────────────────────────────────────────────────────────────┘         │
+│                                                                              │
+│   UPGRADE REQUIREMENTS (Supervised → Autonomous)                            │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │  □ Min 50 actions (current: 35/50)                    70%       │       │
+│   │  ■ Success rate > 85% (current: 88%)                  100%      │       │
+│   │  ■ Correction rate < 10% (current: 6%)                100%      │       │
+│   │  □ 10+ action streak (current: 7/10)                  70%       │       │
+│   │  ─────────────────────────────────────────────────────────      │       │
+│   │  Overall progress: 72% complete                                  │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Category-Based Trust** | Separate trust scores for different action categories |
+| **Automatic Upgrades** | Level upgrades when thresholds are met |
+| **Downgrade Triggers** | Automatic demotion on failures or correction spikes |
+| **Boundary Enforcement** | Actions checked against level-appropriate boundaries |
+
+### Autonomy Levels (Enhanced)
+
+| Level | Name | Allowed Actions | Approval Required |
+|-------|------|-----------------|-------------------|
+| 0 | Assisted | Read-only, suggestions | All writes |
+| 1 | Supervised | Read + limited write | Destructive actions |
+| 2 | Autonomous | Standard operations | High-impact only |
+| 3 | Trusted | Extended operations | Critical only |
+| 4 | Partner | Full collaboration | None |
+
+### Quick Example
+
+```python
+from trust_engine import TrustEngine
+
+engine = TrustEngine(user_id="default")
+
+# Record an action outcome
+signal = engine.record_outcome(
+    action_type="file_edit",
+    category="code_operations",
+    success=True,
+    required_correction=False
+)
+
+print(f"Trust delta: {signal.trust_delta:+.3f}")
+print(f"Level: {signal.autonomy_after} ({engine.get_level_name()})")
+
+# Check boundary before action
+allowed, warnings, violations = engine.check_boundary(
+    action_type="git_push",
+    category="code_operations",
+    context={"branch": "main"}
+)
+
+if not allowed:
+    print(f"Action blocked: {violations}")
+
+# Check upgrade eligibility
+next_level = engine.propose_level_upgrade()
+if next_level:
+    print(f"Ready to upgrade to level {next_level}")
+```
+
+---
+
+## Voice-Optimized Orchestration *(NEW - Phase 4)*
+
+Ultra-low latency skill routing for voice interactions, targeting <250ms first response.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      VOICE ORCHESTRATION FLOW                                │
+│                                                                              │
+│   Voice Query                                                                │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │  "What's the status of the TechCorp project?"                   │       │
+│   │  latency_budget: <250ms                                         │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                  FAST PATH CHECKS                                │       │
+│   │                                                                   │       │
+│   │   1. Proactive Cache  ──► Prepared response? (~10ms)            │       │
+│   │   2. VNKG Retrieval   ──► Voice-optimized entry? (~50ms)        │       │
+│   │   3. Intent Classify  ──► Quick answer possible? (~20ms)        │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                VOICE SKILL ROUTER                                │       │
+│   │                                                                   │       │
+│   │   recall: 1.0 (fast) │ entity_lookup: 0.9 │ deep_research: 0.1  │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │   PersonaPlex (<250ms)  ──►  First chunk streamed               │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | Description |
+|---------|-------------|
+| **Fast Path** | Check proactive cache and VNKG before skill routing |
+| **VNKG** | Voice-Native Knowledge Graph with spoken-form entries |
+| **Intent Classification** | Route simple queries to fast paths |
+| **Streaming Response** | Start speaking while computing more |
+| **Interrupt Handling** | Save context when user interrupts |
+
+### Quick Example
+
+```python
+from voice_orchestrator import VoiceOrchestrator, VoiceQuery
+
+orchestrator = VoiceOrchestrator()
+
+# Process a voice query
+query = VoiceQuery(
+    id="q1",
+    text="What's the status of the TechCorp project?",
+    user_id="default",
+    session_id="session123",
+    active_entities=["TechCorp"]
+)
+
+response = await orchestrator.process_query(query)
+
+print(f"First chunk: {response.first_chunk_latency_ms}ms")  # Target: <250ms
+print(f"Intent: {response.intent_detected}")
+print(f"Provider: {response.provider_used}")
+```
+
+---
+
+## Digital Twin Modeling *(NEW - Phase 4)*
+
+Model HOW users think, not just what they know, enabling personalized assistance.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      DIGITAL TWIN ARCHITECTURE                               │
+│                                                                              │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                   COGNITIVE PROFILE                              │       │
+│   │                                                                   │       │
+│   │   Cognitive Styles:                                              │       │
+│   │   ├── Analytical:  ████████░░  80%                              │       │
+│   │   ├── Conceptual:  ██████░░░░  60%                              │       │
+│   │   ├── Directive:   ████░░░░░░  40%                              │       │
+│   │   └── Behavioral:  ███░░░░░░░  30%                              │       │
+│   │                                                                   │       │
+│   │   Communication: Direct   │  Time: Future-focused               │       │
+│   │   Risk: Neutral           │  Processing: Sequential             │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                 PATTERN DETECTION                                │       │
+│   │                                                                   │       │
+│   │   Decision Patterns:                                             │       │
+│   │   • Planning tasks → asks for data first                        │       │
+│   │   • Code review → prefers bullet points                         │       │
+│   │   • Research → wants comprehensive context                      │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │              PROACTIVE SUGGESTIONS                               │       │
+│   │                                                                   │       │
+│   │   "You typically want to know the timeline. The deadline is     │       │
+│   │    next Friday."                                                 │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Cognitive Styles** | Analytical, Intuitive, Directive, Conceptual, Behavioral |
+| **Communication Prefs** | Direct, Detailed, Visual, Narrative, Structured |
+| **Decision Patterns** | Learn what info users need for decisions |
+| **Proactive Suggestions** | Anticipate needs before they're asked |
+
+### Quick Example
+
+```python
+from digital_twin import DigitalTwinEngine
+
+engine = DigitalTwinEngine()
+
+# Record an interaction
+engine.record_interaction(
+    user_id="default",
+    signal_type="question",
+    content="Can you show me the data breakdown?",
+    topic="planning",
+    task_type="analysis"
+)
+
+# Get personalized context
+context = engine.get_personalized_context(
+    user_id="default",
+    task_type="planning"
+)
+
+print(f"Style: {context['profile']['primary_style']}")  # "analytical"
+print(f"Recommendations: {context['recommendations']}")
+```
+
+---
+
+## Semantic Search with Embeddings *(NEW - Phase 4)*
+
+Vector embeddings enable semantic similarity search across all memory types.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      SEMANTIC SEARCH FLOW                                    │
+│                                                                              │
+│   Query: "How do we handle enterprise client onboarding?"                   │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                  EMBEDDING SERVICE                               │       │
+│   │                                                                   │       │
+│   │   Provider: OpenAI  │  Model: text-embedding-3-small            │       │
+│   │   Dimensions: 1536  │  Cache: Enabled (168h TTL)                │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │                  HYBRID SEARCH                                   │       │
+│   │                                                                   │       │
+│   │   Vector Search (70%)  ──► Semantic similarity                  │       │
+│   │   Keyword Search (30%) ──► Term matching                        │       │
+│   │                                                                   │       │
+│   │   Combined Score = 0.7 × vector + 0.3 × keyword                 │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐       │
+│   │   Results:                                                       │       │
+│   │   1. [procedural] Client onboarding workflow (0.92)             │       │
+│   │   2. [episodic] TechCorp onboarding meeting (0.87)              │       │
+│   │   3. [semantic] Enterprise client requirements (0.84)           │       │
+│   └─────────────────────────────────────────────────────────────────┘       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Multi-Provider** | OpenAI, Voyage, Cohere, or local embeddings |
+| **Embedding Cache** | Reduce costs with intelligent caching |
+| **Hybrid Search** | Combine semantic and keyword matching |
+| **Cross-Memory Search** | Search across all memory types at once |
+
+### Quick Example
+
+```python
+from embeddings import SemanticSearchEngine
+
+engine = SemanticSearchEngine()
+
+# Index memories
+await engine.index_memory(
+    id="mem1",
+    content="The client onboarding process takes 2 weeks",
+    memory_type="procedural"
+)
+
+# Semantic search
+results = await engine.search(
+    query="How long does onboarding take?",
+    top_k=5,
+    search_mode="hybrid"
+)
+
+for result in results:
+    print(f"[{result.memory_type}] {result.combined_score:.2f}: {result.content[:50]}")
+```
+
+---
+
 ## Core Operations
 
 ### LEARN - Capture Knowledge
@@ -285,15 +903,24 @@ Periodic synthesis:
 ├── docs/
 │   ├── ARCHITECTURE.md         # Complete technical architecture
 │   ├── VISION.md               # Long-term vision document
+│   ├── GEMINI-INTEGRATION.md   # Gemini multi-model guide
 │   └── TOOLORCHESTRA-REVIEW.md # ToolOrchestra analysis & enhancements
 │
 ├── schemas/
-│   └── supabase-schema.sql     # Database schema (incl. orchestration tables)
+│   └── supabase-schema.sql     # Database schema (Phase 1-4 tables)
 │
 ├── src/
-│   ├── types.ts                # TypeScript type definitions
+│   ├── types.ts                # TypeScript type definitions (Phase 1-4)
 │   ├── knowledge_operations.py # Core Python operations
-│   └── model_router.py         # Intelligent model routing (NEW)
+│   ├── model_router.py         # Intelligent model routing
+│   ├── context_budget.py       # Dynamic context budgeting (Phase 2)
+│   ├── skill_orchestrator.py   # Skill orchestration layer (Phase 2)
+│   ├── reward_signals.py       # Normalized reward computation (Phase 3)
+│   ├── data_synthesis.py       # Synthetic data generation (Phase 3)
+│   ├── trust_engine.py         # Autonomy trust progression (Phase 3)
+│   ├── voice_orchestrator.py   # Voice-optimized skill routing (NEW - Phase 4)
+│   ├── digital_twin.py         # Digital twin modeling (NEW - Phase 4)
+│   └── embeddings.py           # Vector embeddings & search (NEW - Phase 4)
 │
 ├── config/
 │   └── memory-template.md      # Template for CLAUDE.memory.md
@@ -344,27 +971,42 @@ Currently starting at Level 0, building trust through successful interactions.
 
 ## Future Capabilities
 
-### Phase 1.5: Orchestration Enhancements (In Progress)
-- RL-based routing optimization
-- Real-time constraint adaptation
-- A/B testing framework for models
-- Complexity classifier integration
+### Phase 1: Foundation (Completed)
+- Efficiency tracking in autonomy audit
+- Tool pattern procedural memory
+- Basic preference vectors
+- Model Router integration
 
-### Phase 2: Intelligence (Planned)
-- Vector embeddings for semantic search
-- Pattern detection and recommendations
-- Automatic context injection
+### Phase 2: Skill Orchestration (Completed)
+- **Skill Orchestration Layer** - Intelligent skill coordination
+- **Dynamic Context Budgeting** - Token-efficient context assembly
+- Skill registry with capabilities
+- Multi-skill execution coordination
+- Context packing with quality ranking
 
-### Phase 3: Voice (Planned)
-- Real-time voice interface via PersonaPlex
-- Voice memory (transcription + context)
-- Meeting integration with knowledge extraction
+### Phase 3: Intelligence (Completed)
+- **Normalized Reward Signals** - Reward computation for skill optimization
+- **Synthetic Data Generation** - Training/evaluation data with golden sequences
+- **Autonomy Trust Engine** - Category-based trust with automatic level transitions
+- Running normalization for batch comparison
+- Domain definitions for enterprise, technology, legal, healthcare
+- Boundary enforcement and downgrade triggers
 
-### Phase 4: Autonomy (Planned)
-- Pre-approved action categories
-- Proactive task execution
-- Self-correction and learning
+### Phase 4: Voice & Advanced Autonomy (Completed)
+- **Voice-Optimized Orchestration** - <250ms first response targeting PersonaPlex
+- **Digital Twin Modeling** - Model HOW users think
+- **Vector Embeddings** - Semantic search across all memory types
+- Voice-Native Knowledge Graph (VNKG) for spoken retrieval
+- Proactive preparation and follow-up anticipation
+- Cognitive profile detection and adaptation
+- Hybrid search (vector + keyword)
+
+### Phase 5: Federation & Scale (Planned)
 - Federated organizational intelligence
+- Cross-organization pattern learning
+- Proactive task execution
+- Multi-tenant memory isolation
+- Enterprise deployment patterns
 
 ## Configuration
 
@@ -423,7 +1065,63 @@ Located at repository root, this file:
 
 ## Version History
 
-### v1.1.0 (2026-01-25)
+### v1.4.0 (2026-01-25) - Phase 4: Voice & Advanced Autonomy
+- **Voice-Optimized Orchestration** - Ultra-low latency skill routing for voice (<250ms target)
+- **Digital Twin Modeling** - Cognitive profile detection and personalized assistance
+- **Vector Embeddings** - Semantic search with hybrid vector + keyword matching
+- Voice-Native Knowledge Graph (VNKG) with spoken-form entries
+- Proactive preparation cache with follow-up anticipation
+- Intent classification for fast-path routing
+- Interrupt handling with context preservation
+- Cognitive style detection (analytical, intuitive, directive, conceptual, behavioral)
+- Communication preference learning (direct, detailed, visual, narrative, structured)
+- Decision pattern recognition and information need anticipation
+- Multi-provider embedding support (OpenAI, Voyage, Cohere, local)
+- Embedding cache with configurable TTL
+- Cross-memory-type semantic search
+- New `voice_orchestrator.py` for voice-optimized skill routing
+- New `digital_twin.py` for cognitive modeling
+- New `embeddings.py` for vector embeddings and semantic search
+- New database tables: `arcus_vnkg_entries`, `arcus_voice_queries`, `arcus_proactive_preparations`, `arcus_cognitive_profiles`, `arcus_decision_patterns`, `arcus_interaction_signals`, `arcus_anticipated_needs`, `arcus_embedding_cache`, `arcus_search_index`
+- New RPC functions: `record_voice_query()`, `update_cognitive_profile()`, `get_personalized_context()`, `semantic_search()`
+- New views: `voice_latency_stats`, `digital_twin_summary`, `vnkg_performance`
+- Extended TypeScript types for all Phase 4 components
+
+### v1.3.0 (2026-01-25) - Phase 3: Intelligence
+- **Normalized Reward Signals** - Reward computation system for skill trajectory optimization
+- **Synthetic Data Generation** - Training and evaluation dataset generation
+- **Autonomy Trust Engine** - Progressive trust building with category-based tracking
+- Running normalization with mean/std tracking for batch comparison
+- Preference bonuses and correction penalties in reward calculation
+- Domain definitions (enterprise, technology, legal, healthcare)
+- Task templates with golden skill sequences
+- Evaluation criteria with validation rules
+- Category-based trust metrics (knowledge, code, file, communication, system, financial, research)
+- Automatic level upgrades when thresholds are met
+- Downgrade triggers for failures and correction spikes
+- Boundary enforcement with approval workflows
+- New `reward_signals.py` for normalized reward computation
+- New `data_synthesis.py` for synthetic data generation
+- New `trust_engine.py` for autonomy trust progression
+- New database tables: `arcus_reward_signals`, `arcus_trust_metrics`, `arcus_autonomy_state`, `arcus_synthetic_datasets`
+- New RPC functions: `update_trust_metrics()`, `update_autonomy_state()`, `get_reward_statistics()`
+- New views: `trust_summary`, `reward_trends`, `skill_reward_performance`
+- Extended TypeScript types for Phase 3 components
+
+### v1.2.0 (2026-01-25) - Phase 2: Skill Orchestration
+- **Skill Orchestration Layer** - Multi-skill coordination with intelligent planning
+- **Dynamic Context Budgeting** - Token-efficient context assembly within model limits
+- **Skill Registry** - Register, discover, and execute skills by capability
+- **Context Packing** - Quality-based ranking and selection of knowledge items
+- **Ranking Strategies** - Recency, confidence, relevance, importance, balanced
+- New `context_budget.py` for intelligent context management
+- New `skill_orchestrator.py` for skill coordination
+- New database tables: `arcus_skills`, `arcus_skill_executions`, `arcus_orchestration_runs`, `arcus_context_budget_logs`
+- New RPC functions: `increment_skill_counters()`, `get_best_skill_for_capability()`
+- New views: `skill_performance_summary`, `recent_orchestration_runs`, `context_budget_efficiency`
+- Extended TypeScript types for Phase 2 components
+
+### v1.1.0 (2026-01-25) - Phase 1: Foundation
 - **Model Orchestration** - Intelligent routing inspired by NVIDIA ToolOrchestra
 - **User Preference Vectors** - Customizable accuracy/cost/latency weights
 - **Model Patterns** - Cross-session learning from outcomes
@@ -433,7 +1131,7 @@ Located at repository root, this file:
 - Enhanced Supabase schema with `arcus_model_patterns` and `arcus_user_preference_vectors` tables
 - ToolOrchestra review document with enhancement roadmap
 
-### v1.0.0 (2026-01-24)
+### v1.0.0 (2026-01-24) - Initial Release
 - Initial architecture design
 - Five memory types implemented
 - Supabase schema created
