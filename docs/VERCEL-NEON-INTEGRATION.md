@@ -197,11 +197,18 @@ a2i2-beta-v1/
 ### 2.2 Install Dependencies
 
 ```bash
-npm install @neondatabase/serverless drizzle-orm
-npm install -D drizzle-kit @types/node
+npm install @neondatabase/serverless
+npm install -D @types/node
 
-# Optional but recommended
+# Required for security
 npm install zod                   # Input validation
+
+# Authentication (choose one)
+npm install @clerk/nextjs         # Clerk (recommended for quick setup)
+# OR
+npm install next-auth             # NextAuth.js (more flexible)
+
+# Optional
 npm install ai                    # Vercel AI SDK (if adding chat)
 npm install @anthropic-ai/sdk     # Claude integration
 npm install d3                    # Graph visualization
@@ -234,35 +241,93 @@ export async function query<T>(
 
 ### 2.4 Knowledge Operations Port
 
+> **SECURITY WARNING**: The code examples below are for demonstration purposes.
+> Before deploying to production, you MUST:
+> 1. Add authentication middleware (see Section 2.6)
+> 2. Re-enable Row Level Security with proper policies
+> 3. Validate and sanitize all user inputs
+> 4. Never expose these endpoints without authentication
+
 **`src/lib/knowledge.ts`:**
 
 ```typescript
-import { sql, query } from './db';
-import {
-  EpisodicMemory,
-  SemanticMemory,
-  ProceduralMemory,
-  Entity,
-  Relationship
-} from './types';
+import { sql } from './db';
+
+// Type-safe memory types to prevent SQL injection
+type MemoryType = 'episodic' | 'semantic' | 'procedural';
+
+// Whitelist of allowed columns per memory type to prevent injection
+const ALLOWED_COLUMNS: Record<MemoryType, readonly string[]> = {
+  episodic: ['event_type', 'summary', 'detailed_content', 'participants', 'tags', 'outcome', 'confidence', 'importance'],
+  semantic: ['category', 'name', 'definition', 'source_references', 'tags', 'confidence'],
+  procedural: ['procedure_type', 'procedure_name', 'description', 'steps', 'tags', 'confidence']
+} as const;
 
 export class KnowledgeRepository {
 
   // LEARN: Store new knowledge
+  // Uses explicit table queries to prevent SQL injection
   async learn(
-    memoryType: 'episodic' | 'semantic' | 'procedural',
+    memoryType: MemoryType,
     entry: Record<string, unknown>
   ): Promise<{ id: string }> {
-    const table = `arcus_${memoryType}_memory`;
-    const columns = Object.keys(entry);
-    const values = Object.values(entry);
-    const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+    // Validate columns against whitelist
+    const allowedCols = ALLOWED_COLUMNS[memoryType];
+    const sanitizedEntry: Record<string, unknown> = {};
 
-    const result = await sql`
-      INSERT INTO ${sql(table)} (${sql(columns.join(', '))})
-      VALUES (${sql.raw(placeholders)})
-      RETURNING id
-    `;
+    for (const [key, value] of Object.entries(entry)) {
+      if (allowedCols.includes(key)) {
+        sanitizedEntry[key] = value;
+      }
+    }
+
+    // Use explicit queries per table type to avoid dynamic SQL
+    let result;
+    if (memoryType === 'episodic') {
+      result = await sql`
+        INSERT INTO arcus_episodic_memory
+          (event_type, summary, detailed_content, participants, tags, outcome, confidence, importance)
+        VALUES (
+          ${sanitizedEntry.event_type ?? null},
+          ${sanitizedEntry.summary ?? null},
+          ${JSON.stringify(sanitizedEntry.detailed_content ?? {})},
+          ${sanitizedEntry.participants ?? []},
+          ${sanitizedEntry.tags ?? []},
+          ${sanitizedEntry.outcome ?? null},
+          ${sanitizedEntry.confidence ?? 0.5},
+          ${sanitizedEntry.importance ?? 'normal'}
+        )
+        RETURNING id
+      `;
+    } else if (memoryType === 'semantic') {
+      result = await sql`
+        INSERT INTO arcus_semantic_memory
+          (category, name, definition, source_references, tags, confidence)
+        VALUES (
+          ${sanitizedEntry.category ?? null},
+          ${sanitizedEntry.name ?? null},
+          ${sanitizedEntry.definition ?? null},
+          ${JSON.stringify(sanitizedEntry.source_references ?? [])},
+          ${sanitizedEntry.tags ?? []},
+          ${sanitizedEntry.confidence ?? 0.5}
+        )
+        RETURNING id
+      `;
+    } else {
+      result = await sql`
+        INSERT INTO arcus_procedural_memory
+          (procedure_type, procedure_name, description, steps, tags, confidence)
+        VALUES (
+          ${sanitizedEntry.procedure_type ?? null},
+          ${sanitizedEntry.procedure_name ?? null},
+          ${sanitizedEntry.description ?? null},
+          ${sanitizedEntry.steps ?? []},
+          ${sanitizedEntry.tags ?? []},
+          ${sanitizedEntry.confidence ?? 0.5}
+        )
+        RETURNING id
+      `;
+    }
 
     return { id: result[0].id };
   }
@@ -273,7 +338,7 @@ export class KnowledgeRepository {
   // This implementation uses text-based search as a fallback.
   async recall(options: {
     query: string;
-    memoryTypes?: ('episodic' | 'semantic' | 'procedural')[];
+    memoryTypes?: MemoryType[];
     limit?: number;
     minConfidence?: number;
     daysBack?: number;
@@ -286,36 +351,69 @@ export class KnowledgeRepository {
       daysBack = 30
     } = options;
 
+    // Validate numeric inputs to prevent injection
+    const safeLimit = Math.min(Math.max(1, Math.floor(limit)), 100);
+    const safeDaysBack = Math.min(Math.max(1, Math.floor(daysBack)), 365);
+    const safeConfidence = Math.min(Math.max(0, minConfidence), 1);
+
     const results: Record<string, unknown>[] = [];
 
-    // Map memory types to their searchable text columns
-    const searchColumns: Record<string, string> = {
-      episodic: 'summary',
-      semantic: 'name',
-      procedural: 'procedure_name'
-    };
-
+    // Use explicit queries per table to prevent SQL injection
     for (const type of memoryTypes) {
-      const table = `arcus_${type}_memory`;
-      const searchCol = searchColumns[type];
+      let rows: Record<string, unknown>[] = [];
 
-      // If searchQuery is provided, filter by text match; otherwise return recent
-      const rows = searchQuery
-        ? await sql`
-            SELECT * FROM ${sql(table)}
-            WHERE ${sql(searchCol)} ILIKE ${'%' + searchQuery + '%'}
-            AND confidence >= ${minConfidence}
-            AND created_at >= NOW() - INTERVAL '${daysBack} days'
-            ORDER BY created_at DESC
-            LIMIT ${limit}
-          `
-        : await sql`
-            SELECT * FROM ${sql(table)}
-            WHERE confidence >= ${minConfidence}
-            AND created_at >= NOW() - INTERVAL '${daysBack} days'
-            ORDER BY created_at DESC
-            LIMIT ${limit}
-          `;
+      if (type === 'episodic') {
+        rows = searchQuery
+          ? await sql`
+              SELECT * FROM arcus_episodic_memory
+              WHERE summary ILIKE ${'%' + searchQuery + '%'}
+              AND confidence >= ${safeConfidence}
+              AND created_at >= NOW() - (${safeDaysBack} * INTERVAL '1 day')
+              ORDER BY created_at DESC
+              LIMIT ${safeLimit}
+            `
+          : await sql`
+              SELECT * FROM arcus_episodic_memory
+              WHERE confidence >= ${safeConfidence}
+              AND created_at >= NOW() - (${safeDaysBack} * INTERVAL '1 day')
+              ORDER BY created_at DESC
+              LIMIT ${safeLimit}
+            `;
+      } else if (type === 'semantic') {
+        rows = searchQuery
+          ? await sql`
+              SELECT * FROM arcus_semantic_memory
+              WHERE name ILIKE ${'%' + searchQuery + '%'}
+              AND confidence >= ${safeConfidence}
+              AND created_at >= NOW() - (${safeDaysBack} * INTERVAL '1 day')
+              ORDER BY created_at DESC
+              LIMIT ${safeLimit}
+            `
+          : await sql`
+              SELECT * FROM arcus_semantic_memory
+              WHERE confidence >= ${safeConfidence}
+              AND created_at >= NOW() - (${safeDaysBack} * INTERVAL '1 day')
+              ORDER BY created_at DESC
+              LIMIT ${safeLimit}
+            `;
+      } else if (type === 'procedural') {
+        rows = searchQuery
+          ? await sql`
+              SELECT * FROM arcus_procedural_memory
+              WHERE procedure_name ILIKE ${'%' + searchQuery + '%'}
+              AND confidence >= ${safeConfidence}
+              AND created_at >= NOW() - (${safeDaysBack} * INTERVAL '1 day')
+              ORDER BY created_at DESC
+              LIMIT ${safeLimit}
+            `
+          : await sql`
+              SELECT * FROM arcus_procedural_memory
+              WHERE confidence >= ${safeConfidence}
+              AND created_at >= NOW() - (${safeDaysBack} * INTERVAL '1 day')
+              ORDER BY created_at DESC
+              LIMIT ${safeLimit}
+            `;
+      }
 
       results.push(...rows);
     }
@@ -357,19 +455,22 @@ export class KnowledgeRepository {
     focusAreas?: string[];
     minEvidence?: number;
   }): Promise<{ patterns: Record<string, unknown>[] }> {
-    const { days = 7, focusAreas = [], minEvidence = 3 } = options;
+    const { days = 7, minEvidence = 3 } = options;
+
+    // Validate numeric inputs
+    const safeDays = Math.min(Math.max(1, Math.floor(days)), 90);
+    const safeMinEvidence = Math.min(Math.max(1, Math.floor(minEvidence)), 100);
 
     // Aggregate patterns from recent memories
     const patterns = await sql`
       SELECT
         event_type,
         COUNT(*) as occurrence_count,
-        AVG(confidence) as avg_confidence,
-        array_agg(DISTINCT unnest(tags)) as common_tags
+        AVG(confidence) as avg_confidence
       FROM arcus_episodic_memory
-      WHERE event_timestamp >= NOW() - INTERVAL '${days} days'
+      WHERE event_timestamp >= NOW() - (${safeDays} * INTERVAL '1 day')
       GROUP BY event_type
-      HAVING COUNT(*) >= ${minEvidence}
+      HAVING COUNT(*) >= ${safeMinEvidence}
       ORDER BY occurrence_count DESC
     `;
 
@@ -402,12 +503,15 @@ export const knowledge = new KnowledgeRepository();
 
 ### 2.5 API Routes
 
+> **IMPORTANT**: These routes require authentication in production.
+> See Section 2.6 for middleware setup.
+
 **`src/app/api/learn/route.ts`:**
 
 ```typescript
 import { NextRequest, NextResponse } from 'next/server';
 import { knowledge } from '@/lib/knowledge';
-import { z } from 'zod';
+import { z, ZodError } from 'zod';
 
 const LearnSchema = z.object({
   memoryType: z.enum(['episodic', 'semantic', 'procedural']),
@@ -423,7 +527,16 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
-    console.error('Learn error:', error);
+    // Handle validation errors separately
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { error: 'Validation failed', details: error.errors },
+        { status: 400 }
+      );
+    }
+
+    // Log error server-side only (don't expose details to client)
+    console.error('Learn error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Failed to store knowledge' },
       { status: 500 }
@@ -496,6 +609,82 @@ export async function GET() {
 }
 ```
 
+### 2.6 Authentication Middleware (Required for Production)
+
+> **CRITICAL**: Never deploy API routes without authentication.
+> The examples above will expose your entire knowledge base to the public internet.
+
+**Option A: Clerk (Recommended for quick setup)**
+
+**`src/middleware.ts`:**
+
+```typescript
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+
+// Define which routes require authentication
+const isProtectedRoute = createRouteMatcher([
+  '/api/learn(.*)',
+  '/api/recall(.*)',
+  '/api/relate(.*)',
+  '/api/reflect(.*)',
+  '/api/entities(.*)',
+]);
+
+// Health check remains public
+const isPublicRoute = createRouteMatcher([
+  '/api/health',
+  '/',
+]);
+
+export default clerkMiddleware(async (auth, req) => {
+  if (isProtectedRoute(req)) {
+    await auth.protect();
+  }
+});
+
+export const config = {
+  matcher: ['/((?!.*\\..*|_next).*)', '/', '/(api|trpc)(.*)'],
+};
+```
+
+**Option B: Simple API Key Authentication**
+
+**`src/lib/auth.ts`:**
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+
+export function withAuth(
+  handler: (req: NextRequest) => Promise<NextResponse>
+) {
+  return async (req: NextRequest) => {
+    const apiKey = req.headers.get('x-api-key');
+    const validApiKey = process.env.API_SECRET_KEY;
+
+    if (!apiKey || apiKey !== validApiKey) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    return handler(req);
+  };
+}
+```
+
+**Usage in API routes:**
+
+```typescript
+import { withAuth } from '@/lib/auth';
+
+async function handler(request: NextRequest) {
+  // Your route logic here
+}
+
+export const POST = withAuth(handler);
+```
+
 ---
 
 ## Phase 3: Vercel Deployment
@@ -506,24 +695,13 @@ export async function GET() {
 
 ```json
 {
-  "buildCommand": "next build",
-  "outputDirectory": ".next",
   "framework": "nextjs",
-  "regions": ["iad1"],
-  "env": {
-    "DATABASE_URL": "@database-url"
-  },
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" }
-      ]
-    }
-  ]
+  "regions": ["iad1"]
 }
 ```
+
+> **Note**: For Next.js projects, Vercel automatically handles build configuration.
+> Set `DATABASE_URL` and other secrets via Vercel Dashboard, not in `vercel.json`.
 
 ### 3.2 Environment Variables
 
@@ -760,7 +938,7 @@ function MemoryCard({ memory }: { memory: Memory }) {
 | **Vector Search** | Included | Included (pgvector) |
 | **Connection Pooling** | REST only | Native pooling |
 | **Scaling** | Manual | Auto-scaling (serverless) |
-| **Branching** | Not available | Built-in (dev/staging/prod) |
+| **Branching** | Via projects/migrations | Native instant branching |
 | **Cold Start** | N/A | ~250ms (optimized) |
 
 **Estimated Monthly Cost:**

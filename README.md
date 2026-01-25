@@ -1069,7 +1069,7 @@ A2I2 connects to your existing tools and learns from the data flowing through th
 │        │            │                  │                         │              │
 │        │  Docs      │  Wiki            │  Postgres +             │  Real-time   │
 │        │  indexed   │  synced          │  pgvector               │  voice I/O   │
-│        │                               │  (on Vercel)            │              │
+│        │                               │  (Neon/Supabase)        │              │
 │        │                                                                        │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
