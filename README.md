@@ -490,6 +490,7 @@ a2i2-beta-v1/
 │
 ├── 📄 CLAUDE.md                              # AI assistant instructions
 ├── 📄 CLAUDE.memory.md                       # Session memory file
+├── 📄 LICENSE                                # MIT License
 └── 📄 README.md                              # This file
 ```
 

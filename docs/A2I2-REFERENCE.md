@@ -1,7 +1,7 @@
 # A2I2 - Arcus Intelligence Platform Reference
 
-**Status**: Spun off to dedicated repository
-**Repository**: `a2i2-arcus-intelligence`
+**Status**: Active Development
+**Repository**: `a2i2-beta-v1`
 **Created**: January 24, 2026
 
 ---
@@ -81,26 +81,19 @@ context = arcus.recall("CEO advisor preferences")
 ## Repository Structure (A2I2)
 
 ```
-a2i2-arcus-intelligence/
-├── README.md                    # Product documentation
-├── pyproject.toml               # Python package config
-├── docs/
-│   ├── ARCHITECTURE.md          # System design
-│   ├── STRATEGIC-REVIEW.md      # Novel concepts & IP
-│   ├── PERSONAPLEX-INTEGRATION.md  # Voice guide
-│   └── ...
-├── schemas/
-│   └── supabase-schema.sql      # Database schema
-└── src/
-    └── python/
-        └── a2i2/                # Main package
-            ├── core.py          # ArcusIntelligence class
-            ├── memory/          # Memory architecture
-            ├── twin/            # Digital Twin
-            ├── autonomy/        # Trust Ledger
-            ├── crystallizer/    # IMC
-            ├── cosp/            # Chief of Staff Protocol
-            └── voice/           # VNKG + PersonaPlex
+a2i2-beta-v1/
+├── README.md                              # Product documentation
+├── CLAUDE.md                              # AI assistant instructions
+├── CLAUDE.memory.md                       # Session memory
+├── LICENSE                                # MIT License
+├── .claude/skills/knowledge-repository/   # Core A2I2 skill
+│   ├── SKILL.md                           # Operational logic
+│   ├── docs/                              # Extended documentation
+│   ├── schemas/                           # Database schema
+│   ├── config/                            # Configuration files
+│   └── src/                               # Implementation code
+├── brand-standards/                       # Brand guidelines
+└── docs/                                  # Platform documentation
 ```
 
 ## Getting Started with A2I2
@@ -109,14 +102,12 @@ a2i2-arcus-intelligence/
 
 ```bash
 # Clone the A2I2 repository
-git clone https://github.com/arcus-innovation/a2i2-arcus-intelligence.git
-cd a2i2-arcus-intelligence
+git clone https://github.com/therealchandlerbing/a2i2-beta-v1.git
+cd a2i2-beta-v1
 
-# Install as editable package (recommended)
-pip install -e .
-
-# For development with extra tools
-pip install -e ".[dev]"
+# Set up Supabase schema (see schemas directory)
+# Initialize session memory
+cp .claude/skills/knowledge-repository/config/memory-template.md CLAUDE.memory.md
 ```
 
 ### Quick Start
@@ -180,9 +171,9 @@ See [PERSONAPLEX-INTEGRATION.md](../.claude/skills/knowledge-repository/docs/PER
 ## Contact
 
 **Arcus Innovation Studios**
-- Repository: `a2i2-arcus-intelligence`
-- Origin: `claude-usecases/.claude/skills/knowledge-repository/`
+- Repository: [a2i2-beta-v1](https://github.com/therealchandlerbing/a2i2-beta-v1)
+- Origin: [claude-usecases](https://github.com/therealchandlerbing/claude-usecases)
 
 ---
 
-*This reference document connects the claude-usecases skill library with the A2I2 platform.*
+*This is the dedicated A2I2 platform repository, spun off from claude-usecases.*
