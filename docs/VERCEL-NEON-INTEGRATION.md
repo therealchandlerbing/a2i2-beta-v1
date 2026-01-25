@@ -268,6 +268,9 @@ export class KnowledgeRepository {
   }
 
   // RECALL: Retrieve knowledge
+  // NOTE: For production semantic search, generate embeddings for the query
+  // and use pgvector's similarity operators (e.g., `<->` for L2 distance).
+  // This implementation uses text-based search as a fallback.
   async recall(options: {
     query: string;
     memoryTypes?: ('episodic' | 'semantic' | 'procedural')[];
@@ -283,17 +286,37 @@ export class KnowledgeRepository {
       daysBack = 30
     } = options;
 
-    const results = [];
+    const results: Record<string, unknown>[] = [];
+
+    // Map memory types to their searchable text columns
+    const searchColumns: Record<string, string> = {
+      episodic: 'summary',
+      semantic: 'name',
+      procedural: 'procedure_name'
+    };
 
     for (const type of memoryTypes) {
       const table = `arcus_${type}_memory`;
-      const rows = await sql`
-        SELECT * FROM ${sql(table)}
-        WHERE confidence >= ${minConfidence}
-        AND created_at >= NOW() - INTERVAL '${daysBack} days'
-        ORDER BY created_at DESC
-        LIMIT ${limit}
-      `;
+      const searchCol = searchColumns[type];
+
+      // If searchQuery is provided, filter by text match; otherwise return recent
+      const rows = searchQuery
+        ? await sql`
+            SELECT * FROM ${sql(table)}
+            WHERE ${sql(searchCol)} ILIKE ${'%' + searchQuery + '%'}
+            AND confidence >= ${minConfidence}
+            AND created_at >= NOW() - INTERVAL '${daysBack} days'
+            ORDER BY created_at DESC
+            LIMIT ${limit}
+          `
+        : await sql`
+            SELECT * FROM ${sql(table)}
+            WHERE confidence >= ${minConfidence}
+            AND created_at >= NOW() - INTERVAL '${daysBack} days'
+            ORDER BY created_at DESC
+            LIMIT ${limit}
+          `;
+
       results.push(...rows);
     }
 
@@ -415,13 +438,25 @@ export async function POST(request: NextRequest) {
 import { NextRequest, NextResponse } from 'next/server';
 import { knowledge } from '@/lib/knowledge';
 
+// Valid memory types for type-safe filtering
+const VALID_MEMORY_TYPES = ['episodic', 'semantic', 'procedural'] as const;
+type MemoryType = typeof VALID_MEMORY_TYPES[number];
+
+function parseMemoryTypes(typesParam: string | null): MemoryType[] | undefined {
+  if (!typesParam) return undefined;
+
+  return typesParam
+    .split(',')
+    .filter((t): t is MemoryType => VALID_MEMORY_TYPES.includes(t as MemoryType));
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
 
     const results = await knowledge.recall({
       query: searchParams.get('q') || '',
-      memoryTypes: searchParams.get('types')?.split(',') as any,
+      memoryTypes: parseMemoryTypes(searchParams.get('types')),
       limit: parseInt(searchParams.get('limit') || '10'),
       minConfidence: parseFloat(searchParams.get('confidence') || '0.5'),
       daysBack: parseInt(searchParams.get('days') || '30')
@@ -535,16 +570,36 @@ vercel --prod
 ```typescript
 import { sql } from '@/lib/db';
 
-async function getStats() {
+interface DashboardStats {
+  episodic_count: number;
+  semantic_count: number;
+  procedural_count: number;
+  entity_count: number;
+  relationship_count: number;
+}
+
+// Optimized query using UNION ALL to reduce database round trips
+async function getStats(): Promise<DashboardStats> {
   const stats = await sql`
     SELECT
-      (SELECT COUNT(*) FROM arcus_episodic_memory) as episodic_count,
-      (SELECT COUNT(*) FROM arcus_semantic_memory) as semantic_count,
-      (SELECT COUNT(*) FROM arcus_procedural_memory) as procedural_count,
-      (SELECT COUNT(*) FROM arcus_entities) as entity_count,
-      (SELECT COUNT(*) FROM arcus_relationships) as relationship_count
+      SUM(CASE WHEN type = 'episodic' THEN count ELSE 0 END)::int as episodic_count,
+      SUM(CASE WHEN type = 'semantic' THEN count ELSE 0 END)::int as semantic_count,
+      SUM(CASE WHEN type = 'procedural' THEN count ELSE 0 END)::int as procedural_count,
+      SUM(CASE WHEN type = 'entity' THEN count ELSE 0 END)::int as entity_count,
+      SUM(CASE WHEN type = 'relationship' THEN count ELSE 0 END)::int as relationship_count
+    FROM (
+      SELECT 'episodic' as type, COUNT(*) as count FROM arcus_episodic_memory
+      UNION ALL
+      SELECT 'semantic' as type, COUNT(*) as count FROM arcus_semantic_memory
+      UNION ALL
+      SELECT 'procedural' as type, COUNT(*) as count FROM arcus_procedural_memory
+      UNION ALL
+      SELECT 'entity' as type, COUNT(*) as count FROM arcus_entities
+      UNION ALL
+      SELECT 'relationship' as type, COUNT(*) as count FROM arcus_relationships
+    ) as counts
   `;
-  return stats[0];
+  return stats[0] as DashboardStats;
 }
 
 export default async function Dashboard() {
@@ -584,14 +639,39 @@ function StatCard({ title, count }: { title: string; count: number }) {
 
 import { useState, useEffect } from 'react';
 
+// Define proper TypeScript interfaces for type safety
+interface Memory {
+  id: string;
+  summary?: string;
+  name?: string;
+  procedure_name?: string;
+  confidence: number;
+  detailed_content?: { description?: string };
+  definition?: string;
+  steps?: string[];
+  tags?: string[];
+  created_at: string;
+}
+
+type MemoryType = 'episodic' | 'semantic' | 'procedural';
+
 export default function MemoriesPage() {
-  const [memories, setMemories] = useState([]);
-  const [memoryType, setMemoryType] = useState('episodic');
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [memoryType, setMemoryType] = useState<MemoryType>('episodic');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    setIsLoading(true);
     fetch(`/api/recall?types=${memoryType}&limit=50`)
       .then(res => res.json())
-      .then(data => setMemories(data.results));
+      .then(data => {
+        setMemories(data.results || []);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to fetch memories:', err);
+        setIsLoading(false);
+      });
   }, [memoryType]);
 
   return (
@@ -599,7 +679,7 @@ export default function MemoriesPage() {
       <h1 className="text-3xl font-bold mb-8">Memory Browser</h1>
 
       <div className="flex gap-4 mb-6">
-        {['episodic', 'semantic', 'procedural'].map(type => (
+        {(['episodic', 'semantic', 'procedural'] as const).map(type => (
           <button
             key={type}
             onClick={() => setMemoryType(type)}
@@ -614,34 +694,56 @@ export default function MemoriesPage() {
         ))}
       </div>
 
-      <div className="space-y-4">
-        {memories.map((memory: any) => (
-          <MemoryCard key={memory.id} memory={memory} />
-        ))}
-      </div>
+      {isLoading ? (
+        <p className="text-gray-500">Loading memories...</p>
+      ) : (
+        <div className="space-y-4">
+          {memories.map((memory) => (
+            <MemoryCard key={memory.id} memory={memory} />
+          ))}
+          {memories.length === 0 && (
+            <p className="text-gray-500">No memories found.</p>
+          )}
+        </div>
+      )}
     </main>
   );
 }
 
-function MemoryCard({ memory }: { memory: any }) {
+function MemoryCard({ memory }: { memory: Memory }) {
+  const title = memory.summary || memory.name || memory.procedure_name || 'Untitled';
+  const description = memory.detailed_content?.description
+    || memory.definition
+    || memory.steps?.[0]
+    || '';
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
       <div className="flex justify-between items-start">
-        <h3 className="font-medium">{memory.summary || memory.name || memory.procedure_name}</h3>
+        <h3 className="font-medium">{title}</h3>
         <span className="text-sm text-gray-500">
-          {Math.round(memory.confidence * 100)}% confidence
+          {memory.confidence != null
+            ? `${Math.round(memory.confidence * 100)}% confidence`
+            : ''}
         </span>
       </div>
-      <p className="text-gray-600 dark:text-gray-400 mt-2 text-sm">
-        {memory.detailed_content?.description || memory.definition || memory.steps?.[0]}
-      </p>
-      <div className="mt-3 flex gap-2">
-        {memory.tags?.map((tag: string) => (
-          <span key={tag} className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs">
-            {tag}
-          </span>
-        ))}
-      </div>
+      {description && (
+        <p className="text-gray-600 dark:text-gray-400 mt-2 text-sm">
+          {description}
+        </p>
+      )}
+      {memory.tags && memory.tags.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {memory.tags.map((tag) => (
+            <span
+              key={tag}
+              className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
