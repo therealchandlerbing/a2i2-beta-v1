@@ -509,7 +509,7 @@ Eduardo (Engineering) needs to know about a Design decision.
 | **Mobile** | React Native + Expo | Share code with web team |
 | **Database** | Supabase | Already designed for, realtime built-in |
 | **Auth** | Supabase Auth | Integrated, supports org/team |
-| **Voice Processing** | PersonaPlex | <200ms, designed for this |
+| **Voice Processing** | PersonaPlex 7B | <200ms, open source, full control |
 | **Wake Word** | Picovoice Porcupine | Best balance of accuracy/efficiency |
 | **Realtime** | Supabase Realtime | Already integrated |
 | **API** | Python FastAPI | Matches existing backend code |

@@ -151,6 +151,7 @@
 ## Recent Captures
 | Timestamp | Type | Summary | Confidence |
 |-----------|------|---------|------------|
+| 2026-01-26 | preference | PersonaPlex 7B as primary voice model (open source) | 1.00 |
 | 2026-01-26 | semantic | Platform interaction design: voice + multi-modal access | 0.95 |
 | 2026-01-26 | preference | "Hey Arcus" wake word activation desired | 0.95 |
 | 2026-01-26 | preference | Team/collective intelligence is priority | 0.90 |
