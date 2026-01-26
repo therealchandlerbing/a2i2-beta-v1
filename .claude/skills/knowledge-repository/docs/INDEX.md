@@ -32,6 +32,7 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Complete technical architecture (1,300+ lines) |
 | [VISION.md](VISION.md) | R2-D2 / Enterprise computer vision |
 | [STRATEGIC-REVIEW.md](STRATEGIC-REVIEW.md) | Novel concepts and intellectual property |
+| [PLATFORM-DESIGN.md](PLATFORM-DESIGN.md) | **NEW** Interaction & access architecture |
 
 ---
 
@@ -214,6 +215,7 @@ A2I2 uses four core memory operations:
 
 | Date | Change |
 |:-----|:-------|
+| 2026-01-26 | Added PLATFORM-DESIGN.md for interaction architecture |
 | 2026-01-25 | Added Gemini Integration documentation |
 | 2026-01-25 | Created INDEX.md |
 | 2026-01-24 | Initial documentation structure |

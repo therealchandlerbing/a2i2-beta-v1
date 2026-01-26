@@ -2,8 +2,8 @@
 # Arcus Knowledge Repository - Session Memory
 # This file is read by Claude at session start and updated with learnings
 # Version: 1.0.0
-# Last Updated: 2026-01-24T00:00:00Z
-# Session Count: 1
+# Last Updated: 2026-01-26T00:00:00Z
+# Session Count: 2
 ---
 
 # User Preferences
@@ -39,12 +39,19 @@
 1. **Knowledge Repository Setup** (Priority: HIGH)
    - Building persistent memory system for Claude
    - Vision: R2-D2/Enterprise computer level AI companion
-   - Current phase: Foundation architecture
+   - Current phase: Platform Design & Interaction Architecture
+   - Next: Deploy Supabase, build first interface
 
-2. **AI Agent Planning Dashboard** (Priority: HIGH)
+2. **Platform Interaction Design** (Priority: HIGH)
+   - "Hey Arcus" voice activation system
+   - Multi-platform access (web, mobile, wearable, embedded)
+   - Collective intelligence for team use
+   - See: PLATFORM-DESIGN.md
+
+3. **AI Agent Planning Dashboard** (Priority: MEDIUM)
    - 12-step wizard for agent development planning
    - Enterprise features with role-based access
-   - Recently completed initial version
+   - Completed initial version
 
 ## Technology Stack
 - Frontend: Next.js 14, React 18, TypeScript
@@ -57,23 +64,32 @@
 # Recent Learnings
 
 ## Session Learnings (Last 7 Days)
-1. **2026-01-25**: ToolOrchestra review - orchestration paradigm insights
+1. **2026-01-26**: Platform interaction design review
+   - User wants "Hey Arcus" wake word like Alexa/Siri
+   - Multiple access points needed: web, mobile, wearable, embedded
+   - Collective intelligence for team (Chandler, Eduardo, Felipe)
+   - Integration priority: connect to existing workflows
+   - Created PLATFORM-DESIGN.md with full interaction architecture
+   - Key decision: voice-first or web-first for MVP?
+   - Wake word tech: Picovoice Porcupine recommended ($100 training)
+
+2. **2026-01-25**: ToolOrchestra review - orchestration paradigm insights
    - Small orchestrators (8B) can coordinate larger tools efficiently
    - Multi-objective rewards: accuracy + efficiency + user preferences
    - A2I2 could add Skill Orchestration Layer for routing
    - Tool patterns should become procedural memory
    - User preference vectors enable runtime control
 
-2. **2026-01-24**: User wants modular, future-proof architecture
+3. **2026-01-24**: User wants modular, future-proof architecture
    - Design for capabilities that don't exist yet
    - Build knowledge foundation now for future AI capabilities
    - Vision: AI companion like R2-D2 or Enterprise computer
 
-3. **2026-01-24**: User prefers architecture-first approach
+4. **2026-01-24**: User prefers architecture-first approach
    - Complete design documents before implementation
    - Think through full system before building pieces
 
-4. **2026-01-24**: Real-time voice agent is a future goal
+5. **2026-01-24**: Real-time voice agent is a future goal
    - Memory-enabled voice interface
    - Autonomous decision-making (with training)
    - Current focus is building knowledge foundation
@@ -82,6 +98,9 @@
 - User thinks in terms of long-term vision, not just immediate tasks
 - User values comprehensive planning and documentation
 - User wants Claude to be proactive and thoughtful
+- User wants A2I2 to be accessible everywhere (ambient computing vision)
+- User thinks about team adoption, not just personal use
+- User wants to understand how things connect before building
 
 ---
 
@@ -99,12 +118,14 @@
 - R2-D2 / Enterprise Computer (vision references)
 
 ## Open Questions
-- Which voice technology stack to use?
+- Wake word decision: "Hey Arcus" or alternative?
+- Voice-first or web-first for MVP?
+- Start with single-user or multi-user from day one?
+- Which external tool to integrate first? (Slack, Calendar, Notion?)
+- Dedicated hardware (Raspberry Pi) or phone-only for voice?
+- Starting autonomy level: Level 0 or Level 1?
 - How to balance comprehensive capture vs. privacy?
 - Specific autonomy boundaries for Phase 2?
-- Should A2I2 add a Skill Orchestration Layer? (ToolOrchestra insight)
-- How to implement user preference vectors for skill routing?
-- Should tool patterns become a new procedural memory type?
 
 ---
 
@@ -130,6 +151,10 @@
 ## Recent Captures
 | Timestamp | Type | Summary | Confidence |
 |-----------|------|---------|------------|
+| 2026-01-26 | semantic | Platform interaction design: voice + multi-modal access | 0.95 |
+| 2026-01-26 | preference | "Hey Arcus" wake word activation desired | 0.95 |
+| 2026-01-26 | preference | Team/collective intelligence is priority | 0.90 |
+| 2026-01-26 | procedural | PLATFORM-DESIGN.md created for interaction architecture | 1.00 |
 | 2026-01-25 | semantic | ToolOrchestra orchestration paradigm | 0.95 |
 | 2026-01-25 | semantic | Multi-objective rewards for efficiency | 0.90 |
 | 2026-01-25 | procedural | Skill orchestration layer pattern | 0.85 |
