@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-This document synthesizes cutting-edge research from the "Toward Efficient Agents" survey (January 2026) and maps it to A2I2's seven novel concepts. After analyzing 28+ papers across memory systems, tool learning, planning efficiency, and multi-agent collaboration, we identify **12 high-priority integration opportunities** that can transform A2I2 into the most powerful personal superintelligence platform—a true Enterprise Computer / R2-D2 experience.
+This document synthesizes cutting-edge research from the "Toward Efficient Agents" survey (January 2026) and maps it to A2I2's seven novel concepts. After analyzing 28+ papers across memory systems, tool learning, planning efficiency, and multi-agent collaboration, we identify **16 high-priority integration opportunities** across 4 implementation phases that can transform A2I2 into the most powerful personal superintelligence platform—a true Enterprise Computer / R2-D2 experience.
 
 ### Key Findings
 
@@ -65,8 +65,8 @@ tier_architecture:  # From MemoryOS + Zep
 temporal_validity:  # From Zep
   valid_from: "ISO8601"
   valid_until: "ISO8601|null"
-  supersedes: ["uuid[]"]
-  derived_from: ["uuid[]"]
+  supersedes: []  # List of UUIDs this memory supersedes
+  derived_from: []  # List of UUIDs this memory was derived from
 
 linking:  # From A-MEM
   types: ["semantic", "causal", "temporal", "entity_cooccurrence"]
@@ -182,6 +182,9 @@ class DigitalTwinEnhanced(DigitalTwinEngine):
 Enhance `trust_engine.py` with process-level confidence:
 
 ```python
+import math
+from typing import Dict, List, Tuple
+
 # From research: Dense rewards outperform sparse rewards 2.7x
 
 class TrustEngineEnhanced(TrustEngine):
@@ -275,6 +278,10 @@ class TrustEngineEnhanced(TrustEngine):
 **Integration Proposal:**
 
 ```python
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Dict, List, Literal, Optional
+
 @dataclass
 class VoiceNativeKnowledgeUnit:
     """Knowledge unit optimized for voice delivery."""
@@ -284,7 +291,7 @@ class VoiceNativeKnowledgeUnit:
     detail: str    # Expandable full content
 
     # Voice optimization (from VNKG concept)
-    prosody: dict  # {emphasis: [...], pace: "normal"|"slow"|"fast"}
+    prosody: Dict[str, any]  # {emphasis: [...], pace: "normal"|"slow"|"fast"}
     interrupt_safe_points: List[int]  # Character positions safe to interrupt
     pronunciation_hints: Dict[str, str]  # Proper nouns, technical terms
 
@@ -294,7 +301,7 @@ class VoiceNativeKnowledgeUnit:
     supersedes: List[str]  # Previous versions
 
     # Hierarchical linking (from G-Memory)
-    abstraction_level: str  # "insight" | "query" | "interaction"
+    abstraction_level: Literal["insight", "query", "interaction"]
     parent_id: Optional[str]
     child_ids: List[str]
 
@@ -360,6 +367,9 @@ class InstitutionalMemoryCrystallizer:
 
         # From LightMem: Consolidation queue
         self.consolidation_queue: List[PendingCrystal] = []
+
+        # All crystals for pattern detection during sleep consolidation
+        self.all_crystals: List[Crystal] = []
 
     async def extract_phase(
         self,
@@ -533,9 +543,9 @@ tool_selection:
   # From ToolOrchestra: Multi-objective optimization
   optimization:
     objectives:
-      - outcome: 0.5
-      - cost: 0.3
-      - latency: 0.2
+      outcome_weight: 0.5
+      cost_weight: 0.3
+      latency_weight: 0.2
     preference_vectors: true
     bias_correction: "grpo"  # Group Relative Policy Optimization
 
@@ -897,7 +907,7 @@ This positions A2I2 as the most advanced personal superintelligence platform—a
 - Mem0: arXiv:2504.19413 (April 2025)
 - A-MEM: arXiv:2502.12110 (February 2025)
 - Zep: arXiv:2501.13956 (January 2025)
-- MemoryOS: arXiv:2506.06326 (May 2025)
+- MemoryOS: arXiv:2506.06326 (June 2025)
 - MemGPT: arXiv:2310.08560 (October 2023)
 - LightMem: arXiv:2510.18866 (October 2025)
 - Memory-R1: arXiv:2508.19828 (August 2025)
