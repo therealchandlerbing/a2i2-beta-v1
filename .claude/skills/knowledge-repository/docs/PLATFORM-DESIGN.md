@@ -50,7 +50,7 @@ The platform has sophisticated memory, intelligence, and voice capabilities. But
                     ┌──────────────▼──────────────┐
                     │      UNIFIED API LAYER       │
                     │                              │
-                    │  • Authentication (Auth0)    │
+                    │  • Authentication (Supabase) │
                     │  • Rate limiting             │
                     │  • Context assembly          │
                     │  • User identification       │
@@ -315,10 +315,12 @@ Individual memories are useful. But A2I2's real power is organizational intellig
 
 ### Access Control Matrix
 
+**Legend**: ✅ = Available | ❌ = Not available | ⚙️ = Opt-in (user chooses to share)
+
 | Memory Type | Personal | Team | Org | Default |
 |-------------|----------|------|-----|---------|
 | Preferences | ✅ | ❌ | ❌ | Personal |
-| Work style | ✅ | ⚙️ Opt-in | ❌ | Personal |
+| Work style | ✅ | ⚙️ | ❌ | Personal |
 | Episodic (meetings) | ✅ | ✅ If shared meeting | ❌ | Team |
 | Semantic (facts) | ⚙️ | ✅ | ✅ | Org |
 | Procedural (workflows) | ⚙️ | ✅ | ✅ | Team |
@@ -416,7 +418,7 @@ Eduardo (Engineering) needs to know about a Design decision.
     └────┬────┘        └─────┬─────┘       └─────┬────┘
          │                   │                   │
     ┌────┴────┐        ┌─────┴─────┐       ┌─────┴────┐
-    │ • Gmail │        │ • Cal     │       │ • Asana  │
+    │ • Gmail │        │ • Calendar│       │ • Asana  │
     │ • Slack │        │ • Notion  │       │ • Linear │
     │ • Zoom  │        │ • Drive   │       │ • Slack  │
     │ • Meet  │        │ • GitHub  │       │ • Email  │
