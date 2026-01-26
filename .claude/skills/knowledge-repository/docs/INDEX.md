@@ -33,7 +33,8 @@
 | [VISION.md](VISION.md) | R2-D2 / Enterprise computer vision |
 | [STRATEGIC-REVIEW.md](STRATEGIC-REVIEW.md) | Novel concepts and intellectual property |
 | [PLATFORM-DESIGN.md](PLATFORM-DESIGN.md) | Interaction & access architecture |
-| [EFFICIENT-AGENTS-INTEGRATION.md](EFFICIENT-AGENTS-INTEGRATION.md) | **NEW** Research synthesis for platform enhancement |
+| [EFFICIENT-AGENTS-INTEGRATION.md](EFFICIENT-AGENTS-INTEGRATION.md) | Research synthesis for platform enhancement |
+| [CLAWDBOT-INTEGRATION.md](CLAWDBOT-INTEGRATION.md) | **NEW** Multi-channel accessibility patterns from clawdbot |
 
 ---
 
@@ -216,6 +217,7 @@ A2I2 uses four core memory operations:
 
 | Date | Change |
 |:-----|:-------|
+| 2026-01-26 | Added CLAWDBOT-INTEGRATION.md - multi-channel accessibility patterns |
 | 2026-01-26 | Added EFFICIENT-AGENTS-INTEGRATION.md - research synthesis from 28+ papers |
 | 2026-01-26 | Added PLATFORM-DESIGN.md for interaction architecture |
 | 2026-01-25 | Added Gemini Integration documentation |

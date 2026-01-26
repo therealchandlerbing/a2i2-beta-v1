@@ -64,7 +64,17 @@
 # Recent Learnings
 
 ## Session Learnings (Last 7 Days)
-1. **2026-01-26**: Platform interaction design review
+1. **2026-01-26**: Clawdbot integration analysis
+   - Reviewed clawdbot (41k+ stars) for patterns to enhance A2I2
+   - Key insight: Clawdbot = accessibility (12+ channels), A2I2 = intelligence (memory)
+   - Gateway pattern: Single WebSocket control plane for all channels
+   - Priority integration: Slack first (team already uses it)
+   - Chat commands: /recall, /learn, /context for memory operations
+   - Session coordination: Enable cross-user knowledge sharing
+   - Created CLAWDBOT-INTEGRATION.md with full roadmap
+   - Complementary systems - combine for "everywhere + remembers + learns"
+
+2. **2026-01-26**: Platform interaction design review
    - User wants "Hey Arcus" wake word like Alexa/Siri
    - Multiple access points needed: web, mobile, wearable, embedded
    - Collective intelligence for team (Chandler, Eduardo, Felipe)
