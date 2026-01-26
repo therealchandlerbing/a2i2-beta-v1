@@ -327,7 +327,7 @@ Implement A2I2-specific commands:
 ```
 
 #### 1.4 Gateway API Design
-**Effort**: Medium | **Impact**: High | **Priority**: 4
+**Effort**: Medium | **Impact**: High | **Priority**: 3
 
 Single endpoint for all interfaces:
 
@@ -415,7 +415,7 @@ interface ChannelAdapter {
 }
 ```
 
-#### 2.3 Companion App (macOS)
+#### 2.4 Companion App (macOS)
 **Effort**: High | **Impact**: Medium | **Priority**: 6
 
 Lightweight menu bar app:
