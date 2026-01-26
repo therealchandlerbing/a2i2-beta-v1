@@ -521,10 +521,10 @@ Eduardo (Engineering) needs to know about a Design decision.
 **For simpler MVP**:
 - Skip mobile app initially → Use web PWA
 - Skip custom wake word → Use Alexa skill or Siri Shortcut
-- Skip PersonaPlex → Use Gemini 2.0 Flash Live
+- Skip PersonaPlex → Use Gemini 2.5 Flash Live
 
 **For faster voice**:
-- Gemini 2.0 Flash with Live API (native multimodal)
+- Gemini 2.5 Flash with Live API (native multimodal)
 - Higher latency but no separate PersonaPlex setup
 
 ---
