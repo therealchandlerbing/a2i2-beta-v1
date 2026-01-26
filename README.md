@@ -1013,7 +1013,7 @@ A2I2 is designed to be accessible wherever you work—voice, mobile, messaging, 
 │   │  └─────────┘      └─────────────┘      └─────────┘      └─────────┘    │   │
 │   │                                                                          │   │
 │   │  ✓ No app required    ✓ Apple Watch    ✓ CarPlay    ✓ HomePod          │   │
-│   │  ✓ Hands-free         ✓ "Hey Siri"     ✓ Offline    ✓ Zero install     │   │
+│   │  ✓ Hands-free         ✓ "Hey Siri"     ✓ All Apple devices             │   │
 │   └──────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                   │
 │   TIER 2: PERSONAPLEX (Full Experience) ────────────────────────────────────┐   │
@@ -1046,6 +1046,7 @@ A2I2 is designed to be accessible wherever you work—voice, mobile, messaging, 
 | **Web Chat** | 🔜 Planned | Browser-based interface | Native widget |
 | **Telegram** | 📋 Roadmap | International users | grammY |
 | **iMessage** | 📋 Roadmap | Apple ecosystem | imsg library |
+| **Slack** | 📋 Roadmap | Enterprise teams | Bolt framework |
 
 ### Channel Priority Rationale
 
@@ -1085,10 +1086,13 @@ FUTURE CONSIDERATION:
 │   │ Get Contents of URL                           │                               │
 │   │ POST https://arcus.yourdomain.com/api/voice  │                               │
 │   │                                               │                               │
-│   │ Headers: Authorization: Bearer [API_KEY]     │                               │
+│   │ Headers: Authorization: Bearer [TOKEN]       │                               │
 │   │ Body: { "query": "[Spoken Input]",           │                               │
 │   │         "user_id": "user_123",               │                               │
 │   │         "channel": "siri" }                  │                               │
+│   │                                               │                               │
+│   │ ⚠️  Use short-lived tokens, not long-lived   │                               │
+│   │     API keys. See security guide.            │                               │
 │   └──────────────────────────────────────────────┘                               │
 │          │                                                                        │
 │          ▼                                                                        │
@@ -1894,7 +1898,7 @@ Vision        ░░░░░░░░░░░░░░░░░░░░░░
 | **v1.3.0** | 2026-01-20 | Phase 3: Reward signals, Synthetic data, Trust engine, Category-based tracking |
 | **v1.2.0** | 2026-01-15 | Phase 2: Skill orchestration, Context budgeting, Model routing |
 | **v1.1.0** | 2026-01-10 | Multi-channel strategy, Siri Shortcuts, Clawdbot analysis |
-| **v1.0.0** | 2026-01-05 | Initial release: Core memory, Gemini integration, PersonaPlex |
+| **v1.0.0-beta** | 2026-01-05 | Initial release: Core memory, Gemini integration, PersonaPlex |
 
 <br/>
 
