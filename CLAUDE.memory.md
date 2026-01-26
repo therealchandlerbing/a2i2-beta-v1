@@ -64,7 +64,27 @@
 # Recent Learnings
 
 ## Session Learnings (Last 7 Days)
-1. **2026-01-26**: Clawdbot integration analysis
+1. **2026-01-26**: Voice architecture strategic design
+   - Created VOICE-ARCHITECTURE.md with progressive enhancement strategy
+   - **Phase 1 (MVP)**: Siri Shortcuts as validation layer (Weeks 1-2)
+     - "Hey Siri, ask Arcus..." via webhook endpoint
+     - 25-30 second timeout limit - optimize responses
+     - Works on iPhone, Apple Watch, CarPlay (with limitations)
+     - Zero app development, immediate deployment
+   - **Phase 2 (Native)**: React Native + PersonaPlex (Weeks 3-6)
+     - Custom "Hey Arcus" wake word via Picovoice Porcupine ($100)
+     - PersonaPlex full-duplex voice (170ms latency)
+     - Custom voice identity (not Siri's voice)
+     - Full memory integration
+   - **Phase 3 (Full)**: All platforms unified (Weeks 7-12)
+     - Web app voice via WebRTC + PersonaPlex
+     - Apple Watch companion app
+     - CarPlay optimization
+     - Cross-device conversation continuity
+   - **Strategic insight**: Siri Shortcuts is VALIDATION, not compromise
+   - Cost estimate: Phase 1 ~$95/mo, Phase 2 ~$270-500/mo, Phase 3 ~$370-700/mo
+
+2. **2026-01-26**: Clawdbot integration analysis
    - Reviewed clawdbot (41k+ stars) for patterns to enhance A2I2
    - Key insight: Clawdbot = accessibility (12+ channels), A2I2 = intelligence (memory)
    - Gateway pattern: Single WebSocket control plane for all channels
