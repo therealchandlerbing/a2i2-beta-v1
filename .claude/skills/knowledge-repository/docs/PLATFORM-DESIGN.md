@@ -509,7 +509,7 @@ Eduardo (Engineering) needs to know about a Design decision.
 | **Mobile** | React Native + Expo | Share code with web team |
 | **Database** | Supabase | Already designed for, realtime built-in |
 | **Auth** | Supabase Auth | Integrated, supports org/team |
-| **Voice Processing** | PersonaPlex 7B | <200ms, open source, full control |
+| **Voice Processing** | PersonaPlex 7B | <200ms, open source, more versatile than Gemini |
 | **Wake Word** | Picovoice Porcupine | Best balance of accuracy/efficiency |
 | **Realtime** | Supabase Realtime | Already integrated |
 | **API** | Python FastAPI | Matches existing backend code |
@@ -518,14 +518,15 @@ Eduardo (Engineering) needs to know about a Design decision.
 
 ### Alternative Considerations
 
-**For simpler MVP**:
+**For simpler MVP** (not recommended for production):
 - Skip mobile app initially → Use web PWA
 - Skip custom wake word → Use Alexa skill or Siri Shortcut
-- Skip PersonaPlex → Use Gemini 2.5 Flash Live
+- Skip PersonaPlex → Use Gemini 2.5 Flash Live (fallback only, less versatile)
 
-**For faster voice**:
-- Gemini 2.5 Flash with Live API (native multimodal)
-- Higher latency but no separate PersonaPlex setup
+**Note on Gemini Live**:
+- Gemini 2.5 Flash Live is a fallback option only
+- PersonaPlex 7B is preferred: open source, more versatile, full control
+- Gemini has higher latency and less customization
 
 ---
 
