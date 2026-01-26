@@ -68,7 +68,11 @@
    - Reviewed clawdbot (41k+ stars) for patterns to enhance A2I2
    - Key insight: Clawdbot = accessibility (12+ channels), A2I2 = intelligence (memory)
    - Gateway pattern: Single WebSocket control plane for all channels
-   - Priority integration: Slack first (team already uses it)
+   - **PREFERENCE**: Team does NOT use Slack - they hate it
+   - **PREFERENCE**: Primary communication is WhatsApp (team + partners)
+   - **PREFERENCE**: Discord preferred for async/community collaboration
+   - Priority integrations: WhatsApp, Siri Shortcuts, Discord (NO Slack)
+   - Siri Shortcuts idea: "Hey Siri, ask Arcus..." via webhook - low effort, high impact
    - Chat commands: /recall, /learn, /context for memory operations
    - Session coordination: Enable cross-user knowledge sharing
    - Created CLAWDBOT-INTEGRATION.md with full roadmap

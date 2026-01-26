@@ -102,13 +102,13 @@ Clawdbot's single `ws://127.0.0.1:18789` endpoint is elegant:
 
 Clawdbot's 12+ channel support means users don't change behavior:
 - Message on WhatsApp → AI responds
-- Slack DM → AI responds
+- Discord DM → AI responds
 - Telegram → AI responds
 
 **A2I2 Application**: Priority channel integrations:
-1. **Slack** - Team collaboration (Arcus Innovation Studios uses it)
-2. **Discord** - Community support
-3. **WhatsApp** - Mobile accessibility
+1. **WhatsApp** - Primary team communication (Arcus Innovation Studios uses it)
+2. **Discord** - Community and async collaboration
+3. **Siri Shortcuts** - iOS voice interface via "Hey Siri"
 4. **Web Widget** - Embeddable interface
 
 ### 3. Chat Commands UX
@@ -207,34 +207,102 @@ Agent-to-agent communication without switching surfaces:
 
 ### Tier 1: High Impact, Achievable Now
 
-#### 1.1 Slack Integration
+#### 1.1 WhatsApp Integration
 **Effort**: Medium | **Impact**: High | **Priority**: 1
 
 ```typescript
-// Proposed architecture
-interface SlackArcusIntegration {
-  // Incoming: Slack events → Arcus
-  onMessage: (event: SlackMessage) => Promise<ArcusResponse>;
-  onMention: (event: SlackMention) => Promise<ArcusResponse>;
-  onReaction: (event: SlackReaction) => void; // Feedback signal
+// Proposed architecture using Baileys (WhatsApp Web API)
+interface WhatsAppArcusIntegration {
+  // Incoming: WhatsApp events → Arcus
+  onMessage: (event: WAMessage) => Promise<ArcusResponse>;
+  onGroupMessage: (event: WAGroupMessage) => Promise<ArcusResponse>;
 
-  // Outgoing: Arcus → Slack
-  sendResponse: (channel: string, message: string) => Promise<void>;
-  sendBlocks: (channel: string, blocks: Block[]) => Promise<void>;
+  // Outgoing: Arcus → WhatsApp
+  sendResponse: (jid: string, message: string) => Promise<void>;
+  sendMedia: (jid: string, media: Buffer, caption?: string) => Promise<void>;
 
   // Context: Memory injection
-  getChannelContext: (channel: string) => MemoryContext;
-  getUserPreferences: (user: string) => Preferences;
+  getChatContext: (jid: string) => MemoryContext;
+  getUserPreferences: (phone: string) => Preferences;
 }
 ```
 
-**Why Slack First**:
-- Team already uses Slack
-- Rich API with blocks, threads, reactions
-- Reactions = implicit feedback for learning
-- Thread history = episodic memory source
+**Why WhatsApp First**:
+- Team and partners already use WhatsApp daily
+- Natural conversation interface
+- Voice messages can be transcribed → episodic memory
+- Group chats = team context capture
+- Available on all devices (phone, desktop, web)
 
-#### 1.2 Chat Commands
+#### 1.2 Siri Shortcuts Integration (iOS)
+**Effort**: Low-Medium | **Impact**: High | **Priority**: 2
+
+Leverage Apple's existing "Hey Siri" infrastructure to talk to A2I2:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  Siri Shortcuts Flow                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│   "Hey Siri, ask Arcus about my meeting tomorrow"           │
+│                         │                                     │
+│                         ▼                                     │
+│   ┌─────────────────────────────────────────┐               │
+│   │         iOS Shortcut: "Ask Arcus"        │               │
+│   │  1. Capture spoken text (Dictate Text)   │               │
+│   │  2. HTTP POST to Arcus Gateway webhook   │               │
+│   │  3. Wait for JSON response               │               │
+│   │  4. Speak response text (Speak Text)     │               │
+│   └─────────────────────────────────────────┘               │
+│                         │                                     │
+│                         ▼                                     │
+│   ┌─────────────────────────────────────────┐               │
+│   │         Arcus Gateway (webhook)          │               │
+│   │  • Authenticate user (API key/device ID) │               │
+│   │  • Inject memory context                 │               │
+│   │  • Route to AI model                     │               │
+│   │  • Return response JSON                  │               │
+│   └─────────────────────────────────────────┘               │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Shortcut Actions**:
+1. **Dictate Text** - Captures voice input
+2. **Get Contents of URL** - POST to `https://arcus.api/webhook/siri`
+3. **Get Dictionary Value** - Extract response text
+4. **Speak Text** - Siri speaks the response
+
+**Why This Works**:
+- Zero custom wake word development needed
+- Works on iPhone, iPad, Apple Watch, HomePod, Mac, CarPlay
+- "Hey Siri" already trained and reliable
+- Can trigger from Lock Screen, hands-free
+- Shortcut can be renamed: "Ask Arcus", "Hey Arcus", "Talk to Arcus"
+
+**Webhook Endpoint Design**:
+```typescript
+// POST /webhook/siri
+interface SiriWebhookRequest {
+  query: string;           // Transcribed speech
+  deviceId: string;        // For user identification
+  shortcutName: string;    // Which shortcut triggered
+  timestamp: Date;
+}
+
+interface SiriWebhookResponse {
+  response: string;        // Text for Siri to speak
+  displayText?: string;    // Optional rich text for notification
+  followUp?: string;       // Prompt for continuation
+}
+```
+
+**Advanced Shortcuts**:
+- "Ask Arcus to remember..." → Triggers /learn operation
+- "What does Arcus know about..." → Triggers /recall operation
+- "Arcus, schedule..." → Calendar integration
+
+#### 1.3 Chat Commands
 **Effort**: Low | **Impact**: Medium | **Priority**: 2
 
 Implement A2I2-specific commands:
@@ -258,8 +326,8 @@ Implement A2I2-specific commands:
 /verbose [0-3]      - Set detail level
 ```
 
-#### 1.3 Gateway API Design
-**Effort**: Medium | **Impact**: High | **Priority**: 3
+#### 1.4 Gateway API Design
+**Effort**: Medium | **Impact**: High | **Priority**: 4
 
 Single endpoint for all interfaces:
 
@@ -297,14 +365,43 @@ Standalone service for "Hey Arcus":
 - Trigger gateway on wake word
 - Route to voice pipeline (PersonaPlex or ElevenLabs)
 
-#### 2.2 Multi-Channel Support
-**Effort**: High | **Impact**: High | **Priority**: 5
+#### 2.2 Discord Integration
+**Effort**: Medium | **Impact**: High | **Priority**: 5
 
-Expand beyond Slack:
-1. **Discord** - Community/support
-2. **WhatsApp** - Mobile accessibility
-3. **Telegram** - International users
-4. **Web Widget** - Embeddable anywhere
+Discord as async collaboration platform:
+
+```typescript
+// Discord.js integration
+interface DiscordArcusIntegration {
+  // Incoming: Discord events → Arcus
+  onMessage: (message: Message) => Promise<ArcusResponse>;
+  onSlashCommand: (interaction: CommandInteraction) => Promise<void>;
+  onReaction: (reaction: MessageReaction) => void; // Feedback signal
+
+  // Outgoing: Arcus → Discord
+  sendResponse: (channel: TextChannel, message: string) => Promise<void>;
+  sendEmbed: (channel: TextChannel, embed: EmbedBuilder) => Promise<void>;
+
+  // Context
+  getServerContext: (guildId: string) => MemoryContext;
+  getUserPreferences: (userId: string) => Preferences;
+}
+```
+
+**Why Discord**:
+- Rich embed support for formatted responses
+- Slash commands for memory operations (/recall, /learn)
+- Reactions = implicit feedback for learning
+- Thread support for context continuity
+- Bot presence indicates availability
+
+#### 2.3 Additional Channels
+**Effort**: Medium | **Impact**: Medium | **Priority**: 6
+
+Expand based on need:
+1. **Telegram** - International users, bot-friendly
+2. **Web Widget** - Embeddable anywhere
+3. **iMessage** - Apple ecosystem integration
 
 Each channel integration follows same pattern:
 ```typescript
@@ -354,27 +451,27 @@ Cross-user knowledge sharing:
 
 ### Phase A: Foundation (Weeks 1-2)
 - [ ] Design Arcus Gateway API specification
-- [ ] Implement chat command parser
-- [ ] Create Slack channel adapter
-- [ ] Test memory injection in Slack context
+- [ ] Implement webhook endpoint for Siri Shortcuts
+- [ ] Create iOS Shortcut template ("Ask Arcus")
+- [ ] Test voice → text → response → speech flow
 
-### Phase B: Integration (Weeks 3-4)
-- [ ] Deploy Slack bot to workspace
-- [ ] Implement /recall, /learn, /context commands
+### Phase B: WhatsApp Integration (Weeks 3-4)
+- [ ] Set up Baileys WhatsApp Web connection
+- [ ] Implement message handlers with memory injection
+- [ ] Add voice message transcription pipeline
+- [ ] Group chat context capture
+
+### Phase C: Discord + Gateway (Weeks 5-8)
+- [ ] Create Discord bot with slash commands
+- [ ] Implement WebSocket gateway for unified access
 - [ ] Add reaction-based feedback capture
-- [ ] Thread history → episodic memory pipeline
-
-### Phase C: Expansion (Weeks 5-8)
-- [ ] Add Discord adapter
-- [ ] Implement WebSocket gateway
 - [ ] Create web widget component
-- [ ] Voice wake word service prototype
 
 ### Phase D: Polish (Weeks 9-12)
-- [ ] macOS companion app
-- [ ] Sandbox execution mode
+- [ ] macOS companion app with keyboard shortcut
+- [ ] Apple Watch complication for quick access
 - [ ] Cross-session knowledge queries
-- [ ] Skills registry design
+- [ ] Advanced Siri Shortcuts (learn, recall, schedule)
 
 ---
 
@@ -392,7 +489,7 @@ interface ArcusMessage {
   id: string;
   timestamp: Date;
   channel: {
-    type: 'slack' | 'discord' | 'telegram' | 'web' | 'voice';
+    type: 'whatsapp' | 'discord' | 'siri' | 'telegram' | 'web' | 'voice';
     identifier: string;
   };
   user: {
@@ -438,11 +535,12 @@ interface ArcusResponse {
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
+| WhatsApp Web connection stability | Medium | Reconnection logic, session persistence |
 | Channel API rate limits | Medium | Implement queuing, respect limits |
 | Memory context explosion | High | Context budget manager (already designed) |
 | Security across channels | High | Pairing policy, allowlists, Trust Ledger |
-| Team adoption friction | Medium | Start with Slack where team already is |
-| Voice accuracy issues | Medium | Fallback to text, confirmation prompts |
+| Siri transcription accuracy | Low | Confirmation prompts, retry option |
+| Voice latency (Siri round-trip) | Medium | Optimize webhook response time (<2s) |
 
 ---
 
@@ -472,11 +570,24 @@ Clawdbot provides a blueprint for **accessibility** - reaching users everywhere 
 The combination creates something neither has alone:
 - **A2I2 + Clawdbot patterns** = Enterprise AI Chief of Staff that's everywhere, remembers everything, and gets smarter over time.
 
-**Recommended First Step**: Slack integration with memory-aware commands. This provides:
-1. Immediate team access (Arcus Innovation Studios uses Slack)
-2. Natural feedback signals (reactions, thread context)
-3. Foundation for multi-channel expansion
-4. Low friction - no new apps to install
+**Recommended First Steps**:
+
+1. **Siri Shortcuts webhook** (lowest effort, high impact):
+   - "Hey Siri, ask Arcus..." works immediately
+   - No app development required
+   - Works on iPhone, Apple Watch, HomePod, CarPlay
+   - Leverages existing "Hey Siri" wake word
+
+2. **WhatsApp integration** (team's primary platform):
+   - Natural conversation interface
+   - Voice messages → transcription → episodic memory
+   - Group chats capture team context
+   - Partners already reachable here
+
+3. **Discord bot** (async collaboration):
+   - Slash commands for memory operations
+   - Rich embeds for formatted responses
+   - Reactions provide feedback signals
 
 ---
 
