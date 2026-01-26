@@ -1,1818 +1,1824 @@
-# Clawdbot Technical Reference for A2I2 Implementation
+# A2I2 Multi-Channel Architecture Design
 
 **Version:** 1.0.0
 **Last Updated:** 2026-01-26
-**Source:** https://docs.clawd.bot/
-**Purpose:** Complete technical reference for implementing A2I2 agent with Clawdbot infrastructure
+**Purpose:** Design patterns and implementation blueprints for A2I2's multi-channel intelligence platform
+**Inspired By:** Clawdbot architecture patterns (https://docs.clawd.bot/)
+
+---
+
+## Executive Summary
+
+This document extracts proven architectural patterns from Clawdbot's multi-channel platform and adapts them for A2I2's Enterprise AI Chief of Staff. The goal is to build **A2I2's own native gateway** that connects to WhatsApp, Discord, and Siri while integrating with A2I2's unique memory system (CAP, ATL, five memory types).
+
+**Key Insight:** Clawdbot excels at *accessibility* (reaching users everywhere). A2I2 excels at *intelligence* (persistent memory, organizational learning). This design combines both.
 
 ---
 
 ## Table of Contents
 
-1. [Gateway Configuration Reference](#gateway-configuration-reference)
-2. [Channel Configuration Details](#channel-configuration-details)
-3. [Agent Configuration Reference](#agent-configuration-reference)
-4. [Session & Memory Management](#session--memory-management)
-5. [Tools & Sandbox Configuration](#tools--sandbox-configuration)
-6. [Model Provider Configuration](#model-provider-configuration)
-7. [Webhooks & Automation](#webhooks--automation)
-8. [Message Handling Configuration](#message-handling-configuration)
-9. [CLI Commands Reference](#cli-commands-reference)
-10. [A2I2 Implementation Checklist](#a2i2-implementation-checklist)
+1. [Core Architecture Patterns](#core-architecture-patterns)
+2. [Arcus Gateway Design](#arcus-gateway-design)
+3. [Channel Adapter Architecture](#channel-adapter-architecture)
+4. [Session & Memory Integration](#session--memory-integration)
+5. [WhatsApp Adapter Design](#whatsapp-adapter-design)
+6. [Discord Adapter Design](#discord-adapter-design)
+7. [Siri/Webhook Integration Design](#siriwebhook-integration-design)
+8. [Security & Access Control](#security--access-control)
+9. [A2I2 Concept Mapping](#a2i2-concept-mapping)
+10. [Implementation Roadmap](#implementation-roadmap)
 
 ---
 
-## Gateway Configuration Reference
+## Core Architecture Patterns
 
-### File Location
+### Pattern 1: Unified Gateway Control Plane
+
+**What Clawdbot Does:**
+- Single WebSocket endpoint (`ws://127.0.0.1:18789`) handles all channels
+- All sessions, events, and tools flow through one control plane
+- Clean separation between gateway logic and channel-specific adapters
+
+**A2I2 Implementation:**
+
 ```
-~/.clawdbot/clawdbot.json
+┌─────────────────────────────────────────────────────────────────┐
+│                      Arcus Gateway                               │
+│                  (WebSocket + HTTP Control Plane)                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   ┌──────────────────────────────────────────────────────────┐  │
+│   │                    Gateway Core                           │  │
+│   │  • Session Manager     • Memory Context Injector         │  │
+│   │  • Event Router        • Autonomy Trust Checker (ATL)    │  │
+│   │  • Model Router        • Knowledge Graph Connector       │  │
+│   └──────────────────────────────────────────────────────────┘  │
+│                              │                                   │
+│         ┌────────────────────┼────────────────────┐             │
+│         ▼                    ▼                    ▼             │
+│   ┌──────────┐        ┌──────────┐        ┌──────────┐         │
+│   │ WhatsApp │        │ Discord  │        │   Siri   │         │
+│   │ Adapter  │        │ Adapter  │        │ Webhook  │         │
+│   └──────────┘        └──────────┘        └──────────┘         │
+│   Baileys lib          discord.js         HTTP POST            │
+│   E.164 phones         Guild/Channel      iOS Shortcuts        │
+│                                                                  │
+│   ┌──────────────────────────────────────────────────────────┐  │
+│   │                A2I2 Memory Layer                          │  │
+│   │  Episodic │ Semantic │ Procedural │ Working │ Relational │  │
+│   │    ↓           ↓          ↓           ↓          ↓       │  │
+│   │  Supabase: arcus_* tables + arcus_knowledge_graph        │  │
+│   └──────────────────────────────────────────────────────────┘  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
-Format: JSON5 (comments + trailing commas allowed)
 
-### Complete Gateway Configuration
+### Pattern 2: Channel Adapter Abstraction
 
-```json5
-{
-  // Gateway server settings
-  gateway: {
-    mode: "local",                    // "local" | "remote"
-    port: 18789,                      // WebSocket + HTTP multiplex port
-    bind: "loopback",                 // "loopback" | "lan" | "tailnet"
+**What Clawdbot Does:**
+- Each channel (WhatsApp, Discord, etc.) implements the same adapter interface
+- Adapters handle: incoming messages, outgoing responses, access control, history
+- Channel-specific concerns isolated from core logic
 
-    // Authentication
-    auth: {
-      mode: "token",                  // "token" | "password"
-      token: "your-shared-token",
-      password: "your-password",      // Or use CLAWDBOT_GATEWAY_PASSWORD env
-      allowTailscale: true            // Allow Tailscale Serve identity
-    },
+**A2I2 Channel Adapter Interface:**
 
-    // Control UI settings
-    controlUi: {
-      enabled: true,
-      basePath: "/",                  // URL prefix: "/ui", "/clawdbot", etc.
-      allowInsecureAuth: false,
-      dangerouslyDisableDeviceAuth: false
-    },
+```typescript
+// A2I2 Channel Adapter Contract
+interface ArcusChannelAdapter {
+  // Identity
+  readonly name: string;                    // "whatsapp" | "discord" | "siri"
+  readonly type: "messaging" | "webhook";
 
-    // Tailscale integration
-    tailscale: {
-      mode: "off",                    // "off" | "serve" | "funnel"
-      resetOnExit: false
-    },
+  // Lifecycle
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  isConnected(): boolean;
 
-    // Hot reload settings
-    reload: {
-      mode: "hybrid",                 // "hybrid" | "hot" | "restart" | "off"
-      debounceMs: 300
-    },
+  // Inbound: Channel → A2I2
+  onMessage(handler: (msg: InboundMessage) => Promise<void>): void;
+  onReaction?(handler: (reaction: Reaction) => void): void;
 
-    // Remote client defaults (for CLI)
-    remote: {
-      url: "ws://gateway.tailnet:18789",
-      transport: "ssh",               // "ssh" | "direct"
-      token: "remote-token",
-      password: "remote-password"
-    },
+  // Outbound: A2I2 → Channel
+  send(message: OutboundMessage): Promise<SendResult>;
+  sendTypingIndicator?(chatId: string): Promise<void>;
 
-    // Trusted reverse proxies
-    trustedProxies: ["10.0.0.1", "192.168.1.1"],
+  // Context
+  getChatContext(chatId: string): Promise<ChatContext>;
+  getUserIdentity(userId: string): Promise<UserIdentity>;
 
-    // HTTP endpoints
-    http: {
-      endpoints: {
-        chatCompletions: { enabled: false }  // OpenAI-compatible endpoint
+  // Access Control
+  checkAccess(userId: string, chatId: string): AccessDecision;
+}
+
+// Normalized message format (channel-agnostic)
+interface InboundMessage {
+  id: string;
+  timestamp: Date;
+  channel: string;                          // "whatsapp" | "discord" | "siri"
+  chatId: string;                           // Normalized chat identifier
+  chatType: "dm" | "group";
+
+  sender: {
+    id: string;                             // Normalized user identifier
+    displayName?: string;
+    phone?: string;                         // WhatsApp E.164
+    discordId?: string;
+    email?: string;
+  };
+
+  content: {
+    text: string;
+    attachments?: Attachment[];
+    replyTo?: {
+      messageId: string;
+      quotedText?: string;
+    };
+  };
+
+  // A2I2-specific: Memory context to inject
+  memoryContext?: {
+    recentEpisodes: EpisodicMemory[];
+    relevantSemantics: SemanticMemory[];
+    userPreferences: ProceduralMemory[];
+    entityRelationships: RelationalMemory[];
+  };
+}
+```
+
+### Pattern 3: Access Control Policies
+
+**What Clawdbot Does:**
+- `dmPolicy`: "pairing" | "allowlist" | "open" | "disabled"
+- Per-channel allowlists (phone numbers, user IDs, usernames)
+- Group-specific settings with mention requirements
+
+**A2I2 Access Control Design:**
+
+```typescript
+// A2I2 Access Control (integrates with Autonomy Trust Ledger)
+interface AccessPolicy {
+  // DM policy
+  dmPolicy: "pairing" | "allowlist" | "open" | "disabled";
+  allowedUsers: UserIdentifier[];           // Cross-channel identifiers
+
+  // Group policy
+  groupPolicy: "allowlist" | "open" | "disabled";
+  allowedGroups: GroupIdentifier[];
+  requireMention: boolean;                  // Only respond when @mentioned
+
+  // A2I2-specific: Trust-based access
+  trustRequirements?: {
+    minTrustLevel: AutonomyLevel;           // L0-L4
+    requirePairedUser: boolean;
+  };
+}
+
+// Pairing flow (new users must be approved)
+interface PairingRequest {
+  userId: string;
+  channel: string;
+  requestedAt: Date;
+  code: string;                             // 6-char approval code
+  expiresAt: Date;                          // 1 hour TTL
+  status: "pending" | "approved" | "denied" | "expired";
+}
+```
+
+### Pattern 4: Session Scoping & Identity Linking
+
+**What Clawdbot Does:**
+- Sessions scoped per sender or collapsed to main session
+- `identityLinks` map same person across channels
+- Session keys: `agent:<agentId>:<channel>:<chatType>:<identifier>`
+
+**A2I2 Session Design:**
+
+```typescript
+// A2I2 Session Management
+interface SessionConfig {
+  // Scoping
+  scope: "per-sender" | "per-channel" | "unified";
+  dmScope: "main" | "per-peer" | "per-channel-peer";
+
+  // Identity linking (same person across channels)
+  identityLinks: {
+    [canonicalUserId: string]: string[];    // ["whatsapp:+1555...", "discord:123..."]
+  };
+
+  // Reset policies
+  reset: {
+    mode: "daily" | "idle" | "manual";
+    atHour?: number;                        // For daily reset
+    idleMinutes?: number;                   // For idle reset
+  };
+
+  // A2I2-specific: Memory persistence
+  memoryPersistence: {
+    flushOnCompaction: boolean;             // Write to CLAUDE.memory.md
+    flushOnIdle: boolean;                   // Write when session goes idle
+    memoryFile: string;                     // "memory/YYYY-MM-DD.md"
+  };
+}
+
+// Session key format for A2I2
+type SessionKey =
+  | `arcus:main`                            // Unified main session
+  | `arcus:${Channel}:dm:${UserId}`         // DM session
+  | `arcus:${Channel}:group:${GroupId}`;    // Group session
+```
+
+### Pattern 5: Heartbeat & Proactive Operations
+
+**What Clawdbot Does:**
+- Configurable heartbeat interval (default 30m)
+- Reads HEARTBEAT.md for instructions
+- Can trigger proactive notifications
+
+**A2I2 Heartbeat Design (REFLECT Operation):**
+
+```typescript
+// A2I2 Heartbeat Configuration
+interface HeartbeatConfig {
+  // Timing
+  interval: string;                         // "30m", "1h", "6h"
+  enabled: boolean;
+
+  // Delivery
+  target: "last" | "whatsapp" | "discord" | "none";
+  recipient?: string;                       // Override recipient
+
+  // A2I2-specific: Triggers REFLECT operation
+  reflectPrompt: string;                    // Default: "Run REFLECT operation..."
+  suppressIfNoLearnings: boolean;           // Don't notify if nothing new
+  minLearningsToReport: number;             // Threshold for notification
+}
+
+// Example HEARTBEAT.md for A2I2
+const HEARTBEAT_TEMPLATE = `
+# A2I2 Heartbeat Instructions
+
+When this heartbeat triggers:
+
+1. **REFLECT** - Synthesize patterns from recent interactions
+   - Review episodic memories from last heartbeat
+   - Identify recurring themes or preferences
+   - Update procedural memory with new patterns
+
+2. **Report** (if significant learnings)
+   - Summarize what was learned
+   - Note any preference changes
+   - Flag items needing user confirmation
+
+3. **Skip** if no significant learnings
+   - Reply: HEARTBEAT_OK
+
+## Thresholds
+- Report if 3+ new learnings since last heartbeat
+- Report if user preferences changed
+- Report if new entity relationships discovered
+`;
+```
+
+---
+
+## Arcus Gateway Design
+
+### Gateway Architecture
+
+```typescript
+// Arcus Gateway - Main Entry Point
+class ArcusGateway {
+  private adapters: Map<string, ArcusChannelAdapter>;
+  private sessionManager: SessionManager;
+  private memoryLayer: A2I2MemoryLayer;
+  private modelRouter: ModelRouter;
+  private trustLedger: AutonomyTrustLedger;
+
+  // Configuration
+  private config: GatewayConfig;
+
+  constructor(config: GatewayConfig) {
+    this.config = config;
+    this.adapters = new Map();
+    this.sessionManager = new SessionManager(config.session);
+    this.memoryLayer = new A2I2MemoryLayer(config.memory);
+    this.modelRouter = new ModelRouter(config.models);
+    this.trustLedger = new AutonomyTrustLedger(config.trust);
+  }
+
+  // Register channel adapters
+  registerAdapter(adapter: ArcusChannelAdapter): void {
+    this.adapters.set(adapter.name, adapter);
+    adapter.onMessage(this.handleInbound.bind(this));
+  }
+
+  // Main message flow
+  private async handleInbound(msg: InboundMessage): Promise<void> {
+    // 1. Access control
+    const access = await this.checkAccess(msg);
+    if (access.denied) {
+      return this.handleAccessDenied(msg, access);
+    }
+
+    // 2. Get or create session
+    const session = await this.sessionManager.getSession(msg);
+
+    // 3. Inject memory context (A2I2-specific)
+    const memoryContext = await this.memoryLayer.getContext({
+      userId: msg.sender.id,
+      chatId: msg.chatId,
+      query: msg.content.text,
+      entityMentions: this.extractEntities(msg.content.text),
+    });
+
+    // 4. Check autonomy level for any actions
+    const trustLevel = await this.trustLedger.getUserTrust(msg.sender.id);
+
+    // 5. Route to model with context
+    const response = await this.modelRouter.process({
+      message: msg,
+      session: session,
+      memoryContext: memoryContext,
+      trustLevel: trustLevel,
+    });
+
+    // 6. Execute any LEARN operations from response
+    await this.processLearnings(response, msg);
+
+    // 7. Send response back through adapter
+    const adapter = this.adapters.get(msg.channel);
+    await adapter.send({
+      chatId: msg.chatId,
+      content: response.text,
+      replyTo: msg.id,
+    });
+
+    // 8. Log to Autonomy Trust Ledger
+    await this.trustLedger.logInteraction({
+      userId: msg.sender.id,
+      action: "response",
+      autonomyLevel: trustLevel,
+      successful: true,
+    });
+  }
+
+  // Extract learnings and persist to memory
+  private async processLearnings(
+    response: ModelResponse,
+    original: InboundMessage
+  ): Promise<void> {
+    // Check for LEARN directives in response
+    if (response.learnings?.length > 0) {
+      for (const learning of response.learnings) {
+        await this.memoryLayer.learn({
+          type: learning.memoryType,         // episodic | semantic | procedural
+          content: learning.content,
+          source: {
+            channel: original.channel,
+            messageId: original.id,
+            userId: original.sender.id,
+          },
+          confidence: learning.confidence,
+        });
       }
-    }
-  },
-
-  // Logging configuration
-  logging: {
-    level: "info",                    // "debug" | "info" | "warn" | "error"
-    file: "/tmp/clawdbot/clawdbot.log",
-    consoleLevel: "info",
-    consoleStyle: "pretty",           // "pretty" | "compact" | "json"
-    redactSensitive: "tools",         // "off" | "tools"
-    redactPatterns: [
-      "\\bTOKEN\\b\\s*[=:]\\s*([\"']?)([^\\s\"']+)\\1"
-    ]
-  },
-
-  // Environment variables
-  env: {
-    OPENROUTER_API_KEY: "sk-or-...",
-    vars: {
-      GROQ_API_KEY: "gsk-..."
-    },
-    shellEnv: {
-      enabled: true,
-      timeoutMs: 15000
-    }
-  },
-
-  // UI appearance
-  ui: {
-    seamColor: "#FF4500",             // Hex color for UI chrome
-    assistant: {
-      name: "Clawdbot",
-      avatar: "CB"                    // Emoji, text, URL, or data URI
     }
   }
 }
 ```
 
-### Default Ports
+### Gateway Configuration
 
-| Service | Port | Description |
-|---------|------|-------------|
-| Gateway (WS + HTTP) | 18789 | Main control plane |
-| Browser CDP | 18792 | Chrome DevTools Protocol |
-| Canvas Host | 18793 | HTML/CSS/JS serving |
+```typescript
+// A2I2 Gateway Configuration Schema
+interface GatewayConfig {
+  // Server settings
+  server: {
+    port: number;                           // Default: 18790 (avoid Clawdbot's 18789)
+    host: string;                           // "127.0.0.1" | "0.0.0.0"
+    auth: {
+      mode: "token" | "none";
+      token?: string;
+    };
+  };
 
-### Environment Variables
+  // Channel adapters to enable
+  channels: {
+    whatsapp?: WhatsAppConfig;
+    discord?: DiscordConfig;
+    siri?: SiriWebhookConfig;
+  };
 
-| Variable | Purpose |
-|----------|---------|
-| `CLAWDBOT_CONFIG_PATH` | Custom config file path |
-| `CLAWDBOT_STATE_DIR` | State directory (~/.clawdbot) |
-| `CLAWDBOT_GATEWAY_PORT` | Override gateway port |
-| `CLAWDBOT_GATEWAY_TOKEN` | Gateway auth token |
-| `CLAWDBOT_GATEWAY_PASSWORD` | Gateway auth password |
-| `CLAWDBOT_AGENT_DIR` | Agent directory override |
-| `CLAWDBOT_OAUTH_DIR` | OAuth credentials directory |
-| `CLAWDBOT_LOAD_SHELL_ENV` | Enable shell env loading |
-| `CLAWDBOT_SKIP_GMAIL_WATCHER` | Disable Gmail auto-watcher |
-| `CLAWDBOT_SKIP_CANVAS_HOST` | Disable canvas host |
+  // Session management
+  session: SessionConfig;
+
+  // A2I2 Memory integration
+  memory: {
+    supabase: {
+      url: string;
+      anonKey: string;
+    };
+    localCache: {
+      enabled: boolean;
+      path: string;                         // "~/.arcus/memory"
+    };
+    contextInjection: {
+      maxEpisodicMemories: number;          // Default: 10
+      maxSemanticFacts: number;             // Default: 20
+      includeRelationships: boolean;        // Include knowledge graph context
+    };
+  };
+
+  // Model routing
+  models: {
+    primary: string;                        // "anthropic/claude-opus-4-5"
+    fallbacks: string[];
+    taskRouting: {
+      complexReasoning: string;             // Claude or Gemini Pro
+      largeDocuments: string;               // Gemini Pro (1M context)
+      imageGeneration: string;              // Gemini Pro Image
+      realTimeInfo: string;                 // Gemini Flash + Search
+      voiceConversation: string;            // PersonaPlex
+    };
+  };
+
+  // Trust & autonomy
+  trust: {
+    defaultLevel: AutonomyLevel;            // L0 for new users
+    autoElevate: boolean;                   // Elevate trust over time
+    requireApprovalAbove: AutonomyLevel;    // L2 - actions above this need approval
+  };
+
+  // Heartbeat (REFLECT operation)
+  heartbeat: HeartbeatConfig;
+}
+```
 
 ---
 
-## Channel Configuration Details
+## Channel Adapter Architecture
+
+### Base Adapter Class
+
+```typescript
+// Abstract base for all A2I2 channel adapters
+abstract class BaseChannelAdapter implements ArcusChannelAdapter {
+  abstract readonly name: string;
+  abstract readonly type: "messaging" | "webhook";
+
+  protected config: ChannelConfig;
+  protected messageHandler?: (msg: InboundMessage) => Promise<void>;
+  protected connected: boolean = false;
+
+  constructor(config: ChannelConfig) {
+    this.config = config;
+  }
+
+  // Common access control logic
+  checkAccess(userId: string, chatId: string): AccessDecision {
+    const policy = this.config.accessPolicy;
+
+    // Check DM policy
+    if (this.isDM(chatId)) {
+      switch (policy.dmPolicy) {
+        case "disabled":
+          return { allowed: false, reason: "DMs disabled" };
+        case "allowlist":
+          if (!policy.allowedUsers.includes(userId)) {
+            return { allowed: false, reason: "Not in allowlist" };
+          }
+          break;
+        case "pairing":
+          // Check if user is paired
+          if (!this.isPaired(userId)) {
+            return { allowed: false, reason: "pairing_required", pairingCode: this.generatePairingCode(userId) };
+          }
+          break;
+        case "open":
+          // Allow all
+          break;
+      }
+    }
+
+    // Check group policy
+    if (this.isGroup(chatId)) {
+      if (policy.groupPolicy === "disabled") {
+        return { allowed: false, reason: "Groups disabled" };
+      }
+      if (policy.groupPolicy === "allowlist" && !policy.allowedGroups.includes(chatId)) {
+        return { allowed: false, reason: "Group not in allowlist" };
+      }
+    }
+
+    return { allowed: true };
+  }
+
+  // Normalize user identity across channels
+  protected normalizeUserId(rawId: string): string {
+    // Format: channel:identifier
+    return `${this.name}:${rawId}`;
+  }
+
+  // Abstract methods for subclasses
+  abstract connect(): Promise<void>;
+  abstract disconnect(): Promise<void>;
+  abstract send(message: OutboundMessage): Promise<SendResult>;
+  abstract getChatContext(chatId: string): Promise<ChatContext>;
+  abstract getUserIdentity(userId: string): Promise<UserIdentity>;
+
+  // Optional methods
+  sendTypingIndicator?(chatId: string): Promise<void>;
+  onReaction?(handler: (reaction: Reaction) => void): void;
+
+  // Registration
+  onMessage(handler: (msg: InboundMessage) => Promise<void>): void {
+    this.messageHandler = handler;
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
+  protected isDM(chatId: string): boolean {
+    return !chatId.includes("group") && !chatId.includes("@g.");
+  }
+
+  protected isGroup(chatId: string): boolean {
+    return !this.isDM(chatId);
+  }
+}
+```
+
+---
+
+## WhatsApp Adapter Design
 
 ### WhatsApp Configuration
 
-**Transport:** WhatsApp Web via Baileys
+```typescript
+interface WhatsAppConfig {
+  enabled: boolean;
 
-```json5
-{
-  channels: {
-    whatsapp: {
-      // DM access control
-      dmPolicy: "pairing",            // "pairing" | "allowlist" | "open" | "disabled"
-      allowFrom: ["+15555550123"],    // E.164 phone numbers
-      selfChatMode: true,             // Enable for personal number usage
+  // Access control
+  accessPolicy: {
+    dmPolicy: "pairing" | "allowlist" | "open" | "disabled";
+    allowedUsers: string[];                 // E.164 phone numbers: ["+15555550123"]
+    groupPolicy: "allowlist" | "open" | "disabled";
+    allowedGroups: string[];                // Group JIDs
+    requireMention: boolean;                // In groups, only respond to @mentions
+  };
 
-      // Read receipts
-      sendReadReceipts: true,         // Blue ticks on message read
+  // Features
+  features: {
+    sendReadReceipts: boolean;              // Blue ticks
+    typingIndicator: boolean;               // "typing..." indicator
+    ackReaction: string | null;             // Emoji to react with on receipt (e.g., "👀")
+    voiceTranscription: boolean;            // Transcribe voice messages
+  };
 
-      // Message formatting
-      textChunkLimit: 4000,           // Max chars per message
-      chunkMode: "length",            // "length" | "newline"
-      mediaMaxMb: 50,                 // Inbound media cap
+  // Message handling
+  messages: {
+    maxLength: number;                      // Chunk long messages (default: 4000)
+    historyLimit: number;                   // Messages to include as context
+  };
 
-      // Config writes permission
-      configWrites: true,             // Allow /config set|unset
+  // Multi-account (future)
+  accounts?: {
+    [accountId: string]: {
+      phone: string;
+      authPath: string;
+    };
+  };
+}
+```
 
-      // Multi-account support
-      accounts: {
-        default: {},
-        personal: {
-          sendReadReceipts: false,    // Per-account override
-          mediaMaxMb: 100
-        },
-        biz: {
-          // authDir: "~/.clawdbot/credentials/whatsapp/biz"
+### WhatsApp Adapter Implementation
+
+```typescript
+// A2I2 WhatsApp Adapter using Baileys
+import makeWASocket, {
+  DisconnectReason,
+  useMultiFileAuthState,
+  WAMessage
+} from "@whiskeysockets/baileys";
+
+class WhatsAppAdapter extends BaseChannelAdapter {
+  readonly name = "whatsapp";
+  readonly type = "messaging" as const;
+
+  private socket: ReturnType<typeof makeWASocket> | null = null;
+  private authState: any;
+
+  constructor(config: WhatsAppConfig) {
+    super(config);
+  }
+
+  async connect(): Promise<void> {
+    // Load auth state
+    const { state, saveCreds } = await useMultiFileAuthState(
+      "~/.arcus/credentials/whatsapp"
+    );
+    this.authState = state;
+
+    // Create socket
+    this.socket = makeWASocket({
+      auth: state,
+      printQRInTerminal: true,              // For initial pairing
+    });
+
+    // Handle connection events
+    this.socket.ev.on("connection.update", (update) => {
+      const { connection, lastDisconnect } = update;
+      if (connection === "close") {
+        const shouldReconnect =
+          (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
+        if (shouldReconnect) {
+          this.connect();                   // Reconnect
         }
-      },
-
-      // Group settings
-      groupPolicy: "allowlist",       // "open" | "disabled" | "allowlist"
-      groupAllowFrom: ["+15551234567"],
-      groups: {
-        "*": { requireMention: true },
-        "120363403215116621@g.us": {
-          requireMention: false,
-          allowFrom: ["@admin"]
-        }
-      },
-
-      // History context
-      historyLimit: 50,               // Group messages to include as context
-      dmHistoryLimit: 30,             // DM history limit in user turns
-      dms: {
-        "+15551234567": { historyLimit: 50 }  // Per-user override
-      },
-
-      // Acknowledgment reactions
-      ackReaction: {
-        emoji: "👀",
-        direct: true,
-        group: "mentions"             // "always" | "mentions" | "never"
-      },
-
-      // Tool actions
-      actions: {
-        reactions: true
-      },
-
-      // Message prefix (inbound)
-      messagePrefix: "",              // Or "[clawdbot]"
-
-      // Block streaming
-      blockStreaming: false,
-      blockStreamingCoalesce: {
-        idleMs: 1000,
-        minChars: 800,
-        maxChars: 4000
+      } else if (connection === "open") {
+        this.connected = true;
+        console.log("WhatsApp connected");
       }
+    });
+
+    // Save credentials on update
+    this.socket.ev.on("creds.update", saveCreds);
+
+    // Handle incoming messages
+    this.socket.ev.on("messages.upsert", async ({ messages }) => {
+      for (const msg of messages) {
+        if (!msg.key.fromMe) {              // Ignore our own messages
+          await this.handleIncomingMessage(msg);
+        }
+      }
+    });
+  }
+
+  private async handleIncomingMessage(waMsg: WAMessage): Promise<void> {
+    if (!this.messageHandler) return;
+
+    const chatId = waMsg.key.remoteJid!;
+    const senderId = this.extractSenderId(waMsg);
+
+    // Check access
+    const access = this.checkAccess(senderId, chatId);
+    if (!access.allowed) {
+      if (access.reason === "pairing_required") {
+        // Send pairing code
+        await this.sendPairingResponse(chatId, access.pairingCode!);
+      }
+      return;
     }
+
+    // Acknowledge receipt (optional)
+    if (this.config.features.ackReaction) {
+      await this.socket?.sendMessage(chatId, {
+        react: { text: this.config.features.ackReaction, key: waMsg.key }
+      });
+    }
+
+    // Send typing indicator
+    if (this.config.features.typingIndicator) {
+      await this.sendTypingIndicator(chatId);
+    }
+
+    // Normalize and forward to gateway
+    const normalized = await this.normalizeMessage(waMsg);
+    await this.messageHandler(normalized);
+
+    // Mark as read
+    if (this.config.features.sendReadReceipts) {
+      await this.socket?.readMessages([waMsg.key]);
+    }
+  }
+
+  private async normalizeMessage(waMsg: WAMessage): Promise<InboundMessage> {
+    const chatId = waMsg.key.remoteJid!;
+    const isGroup = chatId.endsWith("@g.us");
+
+    // Extract text (handle different message types)
+    let text = "";
+    let attachments: Attachment[] = [];
+
+    if (waMsg.message?.conversation) {
+      text = waMsg.message.conversation;
+    } else if (waMsg.message?.extendedTextMessage) {
+      text = waMsg.message.extendedTextMessage.text || "";
+    } else if (waMsg.message?.audioMessage) {
+      // Voice message - transcribe if enabled
+      if (this.config.features.voiceTranscription) {
+        text = await this.transcribeAudio(waMsg);
+      }
+      attachments.push({ type: "audio", placeholder: "<voice message>" });
+    } else if (waMsg.message?.imageMessage) {
+      attachments.push({
+        type: "image",
+        caption: waMsg.message.imageMessage.caption
+      });
+    }
+
+    // Handle quoted replies
+    let replyTo: InboundMessage["content"]["replyTo"] | undefined;
+    const quoted = waMsg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    if (quoted) {
+      replyTo = {
+        messageId: waMsg.message?.extendedTextMessage?.contextInfo?.stanzaId || "",
+        quotedText: quoted.conversation || quoted.extendedTextMessage?.text,
+      };
+    }
+
+    return {
+      id: waMsg.key.id!,
+      timestamp: new Date(waMsg.messageTimestamp as number * 1000),
+      channel: "whatsapp",
+      chatId: chatId,
+      chatType: isGroup ? "group" : "dm",
+      sender: {
+        id: this.normalizeUserId(this.extractSenderId(waMsg)),
+        phone: this.extractSenderId(waMsg),
+        displayName: waMsg.pushName || undefined,
+      },
+      content: {
+        text: text,
+        attachments: attachments.length > 0 ? attachments : undefined,
+        replyTo: replyTo,
+      },
+    };
+  }
+
+  async send(message: OutboundMessage): Promise<SendResult> {
+    if (!this.socket) {
+      return { success: false, error: "Not connected" };
+    }
+
+    try {
+      // Chunk long messages
+      const chunks = this.chunkMessage(message.content, this.config.messages.maxLength);
+
+      for (const chunk of chunks) {
+        await this.socket.sendMessage(message.chatId, { text: chunk });
+      }
+
+      return { success: true, messageId: Date.now().toString() };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  async sendTypingIndicator(chatId: string): Promise<void> {
+    await this.socket?.sendPresenceUpdate("composing", chatId);
+  }
+
+  async disconnect(): Promise<void> {
+    this.socket?.end(undefined);
+    this.connected = false;
+  }
+
+  // Helper methods
+  private extractSenderId(msg: WAMessage): string {
+    if (msg.key.remoteJid?.endsWith("@g.us")) {
+      return msg.key.participant || msg.key.remoteJid;
+    }
+    return msg.key.remoteJid!.replace("@s.whatsapp.net", "");
+  }
+
+  private chunkMessage(text: string, maxLength: number): string[] {
+    if (text.length <= maxLength) return [text];
+
+    const chunks: string[] = [];
+    let remaining = text;
+
+    while (remaining.length > 0) {
+      if (remaining.length <= maxLength) {
+        chunks.push(remaining);
+        break;
+      }
+
+      // Find good break point (newline or space)
+      let breakPoint = remaining.lastIndexOf("\n", maxLength);
+      if (breakPoint === -1) breakPoint = remaining.lastIndexOf(" ", maxLength);
+      if (breakPoint === -1) breakPoint = maxLength;
+
+      chunks.push(remaining.slice(0, breakPoint));
+      remaining = remaining.slice(breakPoint).trim();
+    }
+
+    return chunks;
+  }
+
+  async getChatContext(chatId: string): Promise<ChatContext> {
+    // Get group metadata if applicable
+    if (chatId.endsWith("@g.us") && this.socket) {
+      const metadata = await this.socket.groupMetadata(chatId);
+      return {
+        chatId,
+        chatType: "group",
+        name: metadata.subject,
+        participants: metadata.participants.map(p => p.id),
+      };
+    }
+
+    return {
+      chatId,
+      chatType: "dm",
+    };
+  }
+
+  async getUserIdentity(userId: string): Promise<UserIdentity> {
+    return {
+      id: this.normalizeUserId(userId),
+      channel: "whatsapp",
+      phone: userId,
+    };
   }
 }
 ```
 
-**Credentials Storage:**
-```
-~/.clawdbot/credentials/whatsapp/<accountId>/creds.json
-~/.clawdbot/credentials/whatsapp/<accountId>/creds.json.bak
-```
+---
 
-**CLI Commands:**
-```bash
-clawdbot channels login                    # QR code login
-clawdbot channels login --account personal # Multi-account
-clawdbot channels logout
-clawdbot channels logout --account personal
-clawdbot channels status
-clawdbot channels status --probe
-```
-
-### Telegram Configuration
-
-**Transport:** Bot API via grammY
-
-```json5
-{
-  channels: {
-    telegram: {
-      enabled: true,
-      botToken: "123456:ABC...",      // Or TELEGRAM_BOT_TOKEN env
-      // tokenFile: "/path/to/token", // Alternative: file-based token
-
-      // DM access control
-      dmPolicy: "pairing",            // "pairing" | "allowlist" | "open" | "disabled"
-      allowFrom: ["tg:123456789", "@username"],
-
-      // Group settings
-      groupPolicy: "allowlist",
-      groupAllowFrom: ["tg:123456789"],
-      groups: {
-        "*": { requireMention: true },
-        "-1001234567890": {
-          allowFrom: ["@admin"],
-          systemPrompt: "Keep answers brief.",
-          topics: {
-            "99": {
-              requireMention: false,
-              skills: ["search"],
-              systemPrompt: "Stay on topic."
-            }
-          }
-        }
-      },
-
-      // Custom bot menu commands
-      customCommands: [
-        { command: "backup", description: "Git backup" },
-        { command: "generate", description: "Create an image" }
-      ],
-
-      // History and context
-      historyLimit: 50,
-      dmHistoryLimit: 30,
-
-      // Reply threading
-      replyToMode: "first",           // "off" | "first" | "all"
-      linkPreview: true,
-
-      // Draft streaming (experimental)
-      streamMode: "partial",          // "off" | "partial" | "block"
-      draftChunk: {
-        minChars: 200,
-        maxChars: 800,
-        breakPreference: "paragraph"  // "paragraph" | "newline" | "sentence"
-      },
-
-      // Tool actions
-      actions: {
-        reactions: true,
-        sendMessage: true
-      },
-
-      // Reaction notifications
-      reactionNotifications: "own",   // "off" | "own" | "all"
-
-      // Media limits
-      mediaMaxMb: 5,
-
-      // Retry policy
-      retry: {
-        attempts: 3,
-        minDelayMs: 400,
-        maxDelayMs: 30000,
-        jitter: 0.1
-      },
-
-      // Webhook mode (alternative to polling)
-      webhookUrl: "https://example.com/telegram-webhook",
-      webhookSecret: "secret",
-      webhookPath: "/telegram-webhook",
-
-      // Proxy support
-      proxy: "socks5://localhost:9050",
-
-      // Config writes permission
-      configWrites: true,
-
-      // Multi-account
-      accounts: {
-        default: {
-          name: "Primary bot",
-          botToken: "123456:ABC..."
-        },
-        alerts: {
-          name: "Alerts bot",
-          botToken: "987654:XYZ..."
-        }
-      }
-    }
-  }
-}
-```
+## Discord Adapter Design
 
 ### Discord Configuration
 
-**Transport:** Official Discord Bot Gateway
-
-```json5
-{
-  channels: {
-    discord: {
-      enabled: true,
-      token: "YOUR_BOT_TOKEN",        // Or DISCORD_BOT_TOKEN env
-
-      // Media handling
-      mediaMaxMb: 8,
-      allowBots: false,               // Allow bot-authored messages
-
-      // DM settings
-      dm: {
-        enabled: true,
-        policy: "pairing",            // "pairing" | "allowlist" | "open" | "disabled"
-        allowFrom: ["1234567890", "username"],
-        groupEnabled: false,          // Group DMs
-        groupChannels: ["clawd-dm"]   // Group DM allowlist
-      },
-
-      // Group/guild policy
-      groupPolicy: "allowlist",       // "open" | "disabled" | "allowlist"
-
-      // Guild-specific settings
-      guilds: {
-        "*": { requireMention: true },
-        "123456789012345678": {
-          slug: "friends-of-clawd",
-          requireMention: false,
-          reactionNotifications: "own",  // "off" | "own" | "all" | "allowlist"
-          users: ["987654321098765432"],
-          channels: {
-            general: { allow: true },
-            help: {
-              allow: true,
-              enabled: true,
-              requireMention: true,
-              users: ["987654321098765432"],
-              skills: ["docs"],
-              systemPrompt: "Short answers only."
-            }
-          }
-        }
-      },
-
-      // Tool actions
-      actions: {
-        reactions: true,
-        stickers: true,
-        emojiUploads: true,
-        stickerUploads: true,
-        polls: true,
-        permissions: true,
-        messages: true,
-        threads: true,
-        pins: true,
-        search: true,
-        memberInfo: true,
-        roleInfo: true,
-        channelInfo: true,
-        channels: true,
-        voiceStatus: true,
-        events: true,
-        roles: false,                 // Disabled by default
-        moderation: false             // Disabled by default
-      },
-
-      // Reply threading
-      replyToMode: "off",             // "off" | "first" | "all"
-
-      // History and context
-      historyLimit: 20,
-      dmHistoryLimit: 30,
-
-      // Message formatting
-      textChunkLimit: 2000,
-      chunkMode: "length",            // "length" | "newline"
-      maxLinesPerMessage: 17,
-
-      // Native commands
-      commands: {
-        native: "auto"                // true | false | "auto"
-      },
-
-      // Retry policy
-      retry: {
-        attempts: 3,
-        minDelayMs: 500,
-        maxDelayMs: 30000,
-        jitter: 0.1
-      },
-
-      // Config writes permission
-      configWrites: true
-    }
-  }
-}
-```
-
-**Required Discord Developer Portal Settings:**
-1. Enable **Message Content Intent** (required)
-2. Enable **Server Members Intent** (recommended)
-3. Bot Permissions: View Channels, Send Messages, Read Message History, Embed Links, Attach Files, Add Reactions
-
-### Slack Configuration
-
-**Transport:** Socket Mode
-
-```json5
-{
-  channels: {
-    slack: {
-      enabled: true,
-      botToken: "xoxb-...",           // Or SLACK_BOT_TOKEN env
-      appToken: "xapp-...",           // Or SLACK_APP_TOKEN env
-
-      // DM settings
-      dm: {
-        enabled: true,
-        policy: "pairing",
-        allowFrom: ["U123", "U456"],
-        groupEnabled: false,
-        groupChannels: ["G123"]
-      },
-
-      // Channel settings
-      groupPolicy: "allowlist",
-      channels: {
-        C123: { allow: true, requireMention: true, allowBots: false },
-        "#general": {
-          allow: true,
-          requireMention: true,
-          allowBots: false,
-          users: ["U123"],
-          skills: ["docs"],
-          systemPrompt: "Short answers only."
-        }
-      },
-
-      // History and context
-      historyLimit: 50,
-      dmHistoryLimit: 30,
-
-      // Bot messages
-      allowBots: false,
-
-      // Reaction notifications
-      reactionNotifications: "own",   // "off" | "own" | "all" | "allowlist"
-      reactionAllowlist: ["U123"],
-
-      // Reply threading
-      replyToMode: "off",
-
-      // Thread behavior
-      thread: {
-        historyScope: "thread",       // "thread" | "channel"
-        inheritParent: false
-      },
-
-      // Tool actions
-      actions: {
-        reactions: true,
-        messages: true,
-        pins: true,
-        memberInfo: true,
-        emojiList: true
-      },
-
-      // Slash command
-      slashCommand: {
-        enabled: true,
-        name: "clawd",
-        sessionPrefix: "slack:slash",
-        ephemeral: true
-      },
-
-      // Message formatting
-      textChunkLimit: 4000,
-      chunkMode: "length",
-      mediaMaxMb: 20,
-
-      // Config writes permission
-      configWrites: true
-    }
-  }
-}
-```
-
-### Signal Configuration
-
-**Transport:** signal-cli
-
-```json5
-{
-  channels: {
-    signal: {
-      // Reaction notifications
-      reactionNotifications: "own",   // "off" | "own" | "all" | "allowlist"
-      reactionAllowlist: ["+15551234567", "uuid:123e4567-..."],
-
-      // History context
-      historyLimit: 50,
-
-      // DM settings
-      dmPolicy: "pairing",
-      allowFrom: ["+15551234567"],
-
-      // Group settings
-      groupPolicy: "allowlist",
-      groupAllowFrom: ["+15551234567"]
-    }
-  }
-}
-```
-
-### iMessage Configuration
-
-**Transport:** imsg CLI (macOS only)
-
-```json5
-{
-  channels: {
-    imessage: {
-      enabled: true,
-      cliPath: "imsg",                // Path to imsg CLI
-      dbPath: "~/Library/Messages/chat.db",
-      remoteHost: "user@gateway-host", // For SSH wrapper SCP
-
-      // DM settings
-      dmPolicy: "pairing",
-      allowFrom: ["+15555550123", "user@example.com", "chat_id:123"],
-
-      // History context
-      historyLimit: 50,
-
-      // Media handling
-      includeAttachments: false,
-      mediaMaxMb: 16,
-
-      // Service settings
-      service: "auto",                // "auto" | "iMessage" | "SMS"
-      region: "US",
-
-      // Group settings
-      groupPolicy: "allowlist",
-      groupAllowFrom: ["chat_id:123"],
-      groups: {
-        "*": { requireMention: true }
-      }
-    }
-  }
-}
-```
-
-### Google Chat Configuration
-
-**Transport:** Chat API webhook
-
-```json5
-{
-  channels: {
-    googlechat: {
-      enabled: true,
-      serviceAccountFile: "/path/to/service-account.json",
-      // serviceAccount: {...},       // Inline JSON alternative
-      audienceType: "app-url",        // "app-url" | "project-number"
-      audience: "https://gateway.example.com/googlechat",
-      webhookPath: "/googlechat",
-      botUser: "users/1234567890",
-
-      // DM settings
-      dm: {
-        enabled: true,
-        policy: "pairing",
-        allowFrom: ["users/1234567890"]
-      },
-
-      // Group settings
-      groupPolicy: "allowlist",
-      groups: {
-        "spaces/AAAA": { allow: true, requireMention: true }
-      },
-
-      // Tool actions
-      actions: { reactions: true },
-
-      // Typing indicator
-      typingIndicator: "message",     // "never" | "message"
-
-      // Media limits
-      mediaMaxMb: 20
-    }
-  }
-}
-```
-
-### Microsoft Teams Configuration
-
-```json5
-{
-  channels: {
-    msteams: {
-      // Group settings
-      groupPolicy: "allowlist",
-      groupAllowFrom: ["user@org.com"],
-
-      // DM settings
-      dmPolicy: "pairing",
-      allowFrom: ["user@org.com"]
-    }
-  }
-}
-```
-
-### Mattermost Configuration
-
-**Note:** Requires plugin: `clawdbot plugins install @clawdbot/mattermost`
-
-```json5
-{
-  channels: {
-    mattermost: {
-      enabled: true,
-      botToken: "mm-token",           // Or MATTERMOST_BOT_TOKEN env
-      baseUrl: "https://chat.example.com", // Or MATTERMOST_URL env
-
-      // DM settings
-      dmPolicy: "pairing",
-      allowFrom: ["username"],
-
-      // Chat mode
-      chatmode: "oncall",             // "oncall" | "onmessage" | "onchar"
-      oncharPrefixes: [">", "!"],
-
-      // Group settings
-      groupPolicy: "allowlist",
-      groupAllowFrom: ["username"],
-
-      // Message formatting
-      textChunkLimit: 4000,
-      chunkMode: "length"
-    }
-  }
-}
-```
-
-### Channel Defaults
-
-```json5
-{
-  channels: {
-    defaults: {
-      groupPolicy: "allowlist"        // Default for all channels
-    }
-  }
-}
-```
-
----
-
-## Agent Configuration Reference
-
-### Complete Agent Configuration
-
-```json5
-{
-  agents: {
-    // Default settings for all agents
-    defaults: {
-      workspace: "~/clawd",
-      repoRoot: "~/Projects/clawdbot",
-      skipBootstrap: false,
-      bootstrapMaxChars: 20000,
-      userTimezone: "America/Chicago",
-      timeFormat: "auto",             // "auto" | "12" | "24"
-
-      // Model configuration
-      model: {
-        primary: "anthropic/claude-opus-4-5",
-        fallbacks: ["minimax/MiniMax-M2.1"]
-      },
-
-      imageModel: {
-        primary: "openrouter/qwen/qwen-2.5-vl-72b-instruct:free",
-        fallbacks: ["openrouter/google/gemini-2.0-flash-vision:free"]
-      },
-
-      // Model catalog with aliases and params
-      models: {
-        "anthropic/claude-opus-4-5": { alias: "Opus" },
-        "anthropic/claude-sonnet-4-5": {
-          alias: "Sonnet",
-          params: { temperature: 0.6 }
-        },
-        "openai/gpt-5.2": {
-          alias: "gpt",
-          params: { maxTokens: 8192 }
-        },
-        "zai/glm-4.7": {
-          alias: "GLM",
-          params: {
-            thinking: { type: "enabled", clear_thinking: false }
-          }
-        }
-      },
-
-      // Thinking/reasoning defaults
-      thinkingDefault: "low",         // "off" | "low" | "medium" | "high"
-      verboseDefault: "off",
-      elevatedDefault: "on",
-
-      // Timeouts and limits
-      timeoutSeconds: 600,
-      mediaMaxMb: 5,
-      maxConcurrent: 3,
-      contextTokens: 200000,
-
-      // Heartbeat configuration
-      heartbeat: {
-        every: "30m",                 // Duration: ms, s, m, h
-        target: "last",               // "last" | "whatsapp" | "telegram" | "discord" | "none"
-        to: "+15555550123",           // Optional recipient override
-        session: "main",
-        model: "openai/gpt-5.2-mini", // Optional model override
-        includeReasoning: false,
-        prompt: "Read HEARTBEAT.md. Reply HEARTBEAT_OK if nothing needs attention.",
-        ackMaxChars: 300
-      },
-
-      // Sub-agent defaults
-      subagents: {
-        model: "minimax/MiniMax-M2.1",
-        maxConcurrent: 1,
-        archiveAfterMinutes: 60
-      },
-
-      // Execution settings
-      exec: {
-        backgroundMs: 10000,
-        timeoutSec: 1800,
-        cleanupMs: 1800000
-      },
-
-      // Context pruning
-      contextPruning: {
-        mode: "adaptive",             // "off" | "adaptive" | "aggressive"
-        keepLastAssistants: 3,
-        softTrimRatio: 0.3,
-        hardClearRatio: 0.5,
-        minPrunableToolChars: 50000,
-        softTrim: { maxChars: 4000, headChars: 1500, tailChars: 1500 },
-        hardClear: {
-          enabled: true,
-          placeholder: "[Old tool result content cleared]"
-        },
-        tools: { deny: ["browser", "canvas"] }
-      },
-
-      // Compaction (memory flush)
-      compaction: {
-        mode: "safeguard",            // "default" | "safeguard"
-        reserveTokensFloor: 24000,
-        memoryFlush: {
-          enabled: true,
-          softThresholdTokens: 6000,
-          systemPrompt: "Session nearing compaction. Store durable memories now.",
-          prompt: "Write any lasting notes to memory/YYYY-MM-DD.md; reply with NO_REPLY."
-        }
-      },
-
-      // Block streaming
-      blockStreamingDefault: "off",   // "on" | "off"
-      blockStreamingBreak: "text_end", // "text_end" | "message_end"
-      blockStreamingChunk: {
-        minChars: 800,
-        maxChars: 1200,
-        breakPreference: "paragraph"
-      },
-      blockStreamingCoalesce: {
-        idleMs: 1000,
-        minChars: 800
-      },
-
-      // Human-like delay
-      humanDelay: {
-        mode: "off",                  // "off" | "natural" | "custom"
-        minMs: 800,
-        maxMs: 2500
-      },
-
-      // Typing indicators
-      typingMode: "instant",          // "never" | "instant" | "thinking" | "message"
-      typingIntervalSeconds: 6,
-
-      // CLI backends (fallback)
-      cliBackends: {
-        "claude-cli": {
-          command: "/opt/homebrew/bin/claude"
-        },
-        "my-cli": {
-          command: "my-cli",
-          args: ["--json"],
-          output: "json",
-          modelArg: "--model",
-          sessionArg: "--session",
-          sessionMode: "existing",
-          systemPromptArg: "--system",
-          systemPromptWhen: "first",
-          imageArg: "--image",
-          imageMode: "repeat"
-        }
-      },
-
-      // Sandbox configuration
-      sandbox: {
-        mode: "non-main",             // "off" | "non-main" | "all"
-        scope: "agent",               // "session" | "agent" | "shared"
-        workspaceAccess: "none",      // "none" | "ro" | "rw"
-        workspaceRoot: "~/.clawdbot/sandboxes",
-
-        docker: {
-          image: "clawdbot-sandbox:bookworm-slim",
-          containerPrefix: "clawdbot-sbx-",
-          workdir: "/workspace",
-          readOnlyRoot: true,
-          tmpfs: ["/tmp", "/var/tmp", "/run"],
-          network: "none",
-          user: "1000:1000",
-          capDrop: ["ALL"],
-          env: { LANG: "C.UTF-8" },
-          setupCommand: "apt-get update && apt-get install -y git curl jq",
-          pidsLimit: 256,
-          memory: "1g",
-          memorySwap: "2g",
-          cpus: 1,
-          ulimits: {
-            nofile: { soft: 1024, hard: 2048 },
-            nproc: 256
-          },
-          seccompProfile: "/path/to/seccomp.json",
-          apparmorProfile: "clawdbot-sandbox",
-          dns: ["1.1.1.1", "8.8.8.8"],
-          extraHosts: ["internal.service:10.0.0.5"],
-          binds: ["/var/run/docker.sock:/var/run/docker.sock"]
-        },
-
-        browser: {
-          enabled: false,
-          image: "clawdbot-sandbox-browser:bookworm-slim",
-          containerPrefix: "clawdbot-sbx-browser-",
-          cdpPort: 9222,
-          vncPort: 5900,
-          noVncPort: 6080,
-          headless: false,
-          enableNoVnc: true,
-          allowHostControl: false,
-          autoStart: true,
-          autoStartTimeoutMs: 12000
-        },
-
-        prune: {
-          idleHours: 24,
-          maxAgeDays: 7
-        }
-      }
-    },
-
-    // Multi-agent list
-    list: [
-      {
-        id: "main",
-        default: true,
-        name: "Main Agent",
-        workspace: "~/clawd",
-        agentDir: "~/.clawdbot/agents/main/agent",
-
-        // Identity
-        identity: {
-          name: "Samantha",
-          theme: "helpful sloth",
-          emoji: "🦥",
-          avatar: "avatars/samantha.png"
-        },
-
-        // Per-agent model override
-        model: "anthropic/claude-opus-4-5",
-        // Or object form:
-        // model: {
-        //   primary: "anthropic/claude-opus-4-5",
-        //   fallbacks: []
-        // },
-
-        // Group chat settings
-        groupChat: {
-          mentionPatterns: ["@samantha", "samantha"]
-        },
-
-        // Per-agent sandbox override
-        sandbox: { mode: "off" },
-
-        // Per-agent tool restrictions
-        tools: {
-          profile: "coding",
-          allow: ["memory_search"],
-          deny: []
-        },
-
-        // Per-agent heartbeat
-        heartbeat: {
-          every: "1h",
-          target: "whatsapp"
-        }
-      },
-      {
-        id: "work",
-        workspace: "~/clawd-work",
-        identity: { name: "WorkBot", emoji: "💼" },
-        model: "anthropic/claude-sonnet-4-5",
-        groupChat: { mentionPatterns: ["@workbot"] },
-        sandbox: { mode: "all", workspaceAccess: "ro" },
-        tools: {
-          allow: ["read", "sessions_list", "sessions_history"],
-          deny: ["write", "edit", "exec", "browser"]
-        }
-      }
-    ]
-  },
-
-  // Agent routing bindings
-  bindings: [
-    { agentId: "main", match: { channel: "whatsapp", accountId: "personal" } },
-    { agentId: "work", match: { channel: "whatsapp", accountId: "biz" } },
-    { agentId: "work", match: { channel: "slack" } },
-    { agentId: "main", match: { channel: "telegram", peer: { kind: "dm", id: "123456789" } } },
-    { agentId: "work", match: { channel: "discord", guildId: "123456789012345678" } }
-  ]
-}
-```
-
-### Workspace Bootstrap Files
-
-Auto-created in agent workspace:
-
-| File | Purpose | Max Chars |
-|------|---------|-----------|
-| `AGENTS.md` | Agent instructions and capabilities | 20000 |
-| `SOUL.md` | Agent personality definition | 20000 |
-| `TOOLS.md` | Available tools documentation | 20000 |
-| `IDENTITY.md` | Identity and role definition | 20000 |
-| `USER.md` | User preferences and context | 20000 |
-| `BOOTSTRAP.md` | Bootstrap instructions | 20000 |
-| `MEMORY.md` | Semantic memory index | 20000 |
-| `memory/*.md` | Additional memory files | 20000 |
-| `HEARTBEAT.md` | Heartbeat instructions | 20000 |
-
----
-
-## Session & Memory Management
-
-### Session Configuration
-
-```json5
-{
-  session: {
-    scope: "per-sender",
-    dmScope: "main",                  // "main" | "per-peer" | "per-channel-peer"
-    mainKey: "main",
-
-    // Identity linking across channels
-    identityLinks: {
-      alice: ["telegram:123456789", "discord:987654321012345678"]
-    },
-
-    // Reset policy
-    reset: {
-      mode: "daily",                  // "daily" | "idle"
-      atHour: 4,                      // Local hour (0-23) for daily reset
-      idleMinutes: 60                 // Sliding idle window
-    },
-
-    // Per-session-type overrides
-    resetByType: {
-      thread: { mode: "daily", atHour: 4 },
-      dm: { mode: "idle", idleMinutes: 240 },
-      group: { mode: "idle", idleMinutes: 120 }
-    },
-
-    // Heartbeat idle override
-    heartbeatIdleMinutes: 120,
-
-    // Reset triggers
-    resetTriggers: ["/new", "/reset"],
-
-    // Session store location
-    store: "~/.clawdbot/agents/{agentId}/sessions/sessions.json",
-
-    // Agent-to-agent settings
-    agentToAgent: {
-      maxPingPongTurns: 5             // Max reply-back turns (0-5)
-    },
-
-    // Send policy
-    sendPolicy: {
-      rules: [
-        { action: "deny", match: { channel: "discord", chatType: "group" } },
-        { action: "deny", match: { keyPrefix: "cron:" } }
-      ],
-      default: "allow"
-    },
-
-    // Typing mode
-    typingMode: "instant",
-    typingIntervalSeconds: 6
-  }
-}
-```
-
-### Session Keys
-
-| Session Type | Key Format |
-|--------------|------------|
-| Main/DM | `agent:<agentId>:main` |
-| WhatsApp DM | `agent:<agentId>:whatsapp:dm:<phone>` |
-| WhatsApp Group | `agent:<agentId>:whatsapp:group:<jid>` |
-| Telegram DM | `agent:<agentId>:telegram:dm:<chatId>` |
-| Discord DM | `agent:<agentId>:discord:dm:<userId>` |
-| Discord Guild | `agent:<agentId>:discord:channel:<channelId>` |
-| Slack DM | `agent:<agentId>:slack:dm:<userId>` |
-| Slack Channel | `agent:<agentId>:slack:channel:<channelId>` |
-
----
-
-## Tools & Sandbox Configuration
-
-### Tool Configuration
-
-```json5
-{
-  tools: {
-    // Base profile
-    profile: "coding",                // "minimal" | "coding" | "messaging" | "full"
-
-    // Allow/deny lists
-    allow: ["group:fs", "group:runtime", "memory_search"],
-    deny: ["browser", "canvas"],
-
-    // Per-provider restrictions
-    byProvider: {
-      "google-antigravity": { profile: "minimal" },
-      "openai/gpt-5.2": { allow: ["group:fs", "sessions_list"] }
-    },
-
-    // Elevated (host) exec access
-    elevated: {
-      enabled: true,
-      allowFrom: {
-        whatsapp: ["+15555550123"],
-        telegram: ["tg:123456789", "@username"],
-        discord: ["steipete", "1234567890123"],
-        signal: ["+15555550123"],
-        imessage: ["+15555550123"],
-        webchat: ["session123"]
-      }
-    },
-
-    // Agent-to-agent messaging
-    agentToAgent: {
-      enabled: false,
-      allow: ["home", "work"]
-    },
-
-    // Exec settings
-    exec: {
-      backgroundMs: 10000,
-      timeoutSec: 1800,
-      cleanupMs: 1800000,
-      notifyOnExit: true,
-      applyPatch: {
-        enabled: false,
-        allowModels: ["gpt-5.2"]
-      }
-    },
-
-    // Web tools
-    web: {
-      search: {
-        enabled: true,
-        apiKey: "BRAVE_API_KEY",      // Or use env var
-        maxResults: 5,
-        timeoutSeconds: 30,
-        cacheTtlMinutes: 15
-      },
-      fetch: {
-        enabled: true,
-        maxChars: 50000,
-        timeoutSeconds: 30,
-        cacheTtlMinutes: 15,
-        userAgent: "ClawdbotBot/1.0",
-        readability: true,
-        firecrawl: {
-          enabled: true,
-          apiKey: "FIRECRAWL_API_KEY",
-          baseUrl: "https://api.firecrawl.dev",
-          onlyMainContent: true,
-          maxAgeMs: 86400000,
-          timeoutSeconds: 30
-        }
-      }
-    },
-
-    // Media understanding
-    media: {
-      concurrency: 2,
-      models: [],                     // Shared models (capability-tagged)
-
-      image: {
-        enabled: true,
-        prompt: "Describe this image.",
-        maxChars: 500,
-        maxBytes: 10485760,           // 10MB
-        timeoutSeconds: 60,
-        attachments: {
-          mode: "first",              // "first" | "all"
-          maxAttachments: 1
-        },
-        scope: {
-          default: "allow",
-          rules: []
-        },
-        models: [
-          { provider: "openai", model: "gpt-4o-mini" },
-          { provider: "anthropic" }
-        ]
-      },
-
-      audio: {
-        enabled: true,
-        maxBytes: 20971520,           // 20MB
-        timeoutSeconds: 60,
-        language: "en",
-        scope: {
-          default: "deny",
-          rules: [{ action: "allow", match: { chatType: "direct" } }]
-        },
-        models: [
-          { provider: "openai", model: "gpt-4o-mini-transcribe" },
-          { provider: "groq", model: "whisper-large-v3-turbo" },
-          {
-            type: "cli",
-            command: "whisper",
-            args: ["--model", "base", "{{MediaPath}}"]
-          }
-        ]
-      },
-
-      video: {
-        enabled: true,
-        maxChars: 500,
-        maxBytes: 52428800,           // 50MB
-        timeoutSeconds: 120,
-        models: [
-          { provider: "google", model: "gemini-3-flash-preview" }
-        ]
-      }
-    },
-
-    // Sandbox tool policy
-    sandbox: {
-      tools: {
-        allow: [
-          "exec", "process", "read", "write", "edit", "apply_patch",
-          "sessions_list", "sessions_history", "sessions_send",
-          "sessions_spawn", "session_status"
-        ],
-        deny: ["browser", "canvas", "nodes", "cron", "discord", "gateway"]
-      }
-    },
-
-    // Sub-agent tool policy
-    subagents: {
-      tools: {
-        allow: ["*"],
-        deny: ["gateway"]
-      }
-    }
-  }
-}
-```
-
-### Tool Groups
-
-| Group | Tools |
-|-------|-------|
-| `group:runtime` | exec, bash, process |
-| `group:fs` | read, write, edit, apply_patch |
-| `group:sessions` | sessions_list, sessions_history, sessions_send, sessions_spawn, session_status |
-| `group:memory` | memory_search, memory_get |
-| `group:web` | web_search, web_fetch |
-| `group:ui` | browser, canvas |
-| `group:automation` | cron, gateway |
-| `group:messaging` | message |
-| `group:nodes` | nodes |
-| `group:clawdbot` | All built-in Clawdbot tools |
-
-### Tool Profiles
-
-| Profile | Included Tools |
-|---------|----------------|
-| `minimal` | session_status only |
-| `coding` | group:fs, group:runtime, group:sessions, group:memory, image |
-| `messaging` | group:messaging, sessions_list, sessions_history, sessions_send, session_status |
-| `full` | No restrictions |
-
----
-
-## Model Provider Configuration
-
-### Built-in Providers
-
-```json5
-{
-  agents: {
-    defaults: {
-      model: {
-        primary: "anthropic/claude-opus-4-5",
-        fallbacks: ["openrouter/meta-llama/llama-3.3-70b-instruct:free"]
-      },
-
-      models: {
-        // Anthropic
-        "anthropic/claude-opus-4-5": { alias: "opus" },
-        "anthropic/claude-sonnet-4-5": { alias: "sonnet" },
-
-        // OpenAI
-        "openai/gpt-5.2": { alias: "gpt" },
-        "openai/gpt-5-mini": { alias: "gpt-mini" },
-
-        // Google
-        "google/gemini-3-pro-preview": { alias: "gemini" },
-        "google/gemini-3-flash-preview": { alias: "gemini-flash" },
-
-        // OpenRouter
-        "openrouter/deepseek/deepseek-r1:free": {},
-        "openrouter/meta-llama/llama-3.3-70b-instruct:free": {},
-
-        // Z.AI
-        "zai/glm-4.7": {
-          alias: "GLM",
-          params: { thinking: { type: "enabled" } }
-        },
-
-        // MiniMax
-        "minimax/MiniMax-M2.1": { alias: "minimax" },
-
-        // OpenCode Zen
-        "opencode/claude-opus-4-5": {}
-      }
-    }
-  }
-}
-```
-
-### Custom Provider Configuration
-
-```json5
-{
-  models: {
-    mode: "merge",                    // "merge" | "replace"
-    providers: {
-      // LiteLLM / OpenAI-compatible
-      "custom-proxy": {
-        baseUrl: "http://localhost:4000/v1",
-        apiKey: "${LITELLM_KEY}",
-        api: "openai-completions",    // "openai-completions" | "openai-responses" | "anthropic-messages" | "google-generative-ai"
-        models: [
-          {
-            id: "llama-3.1-8b",
-            name: "Llama 3.1 8B",
-            reasoning: false,
-            input: ["text"],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            contextWindow: 128000,
-            maxTokens: 32000
-          }
-        ]
-      },
-
-      // Anthropic-compatible (MiniMax)
-      "minimax": {
-        baseUrl: "https://api.minimax.io/anthropic",
-        apiKey: "${MINIMAX_API_KEY}",
-        api: "anthropic-messages",
-        models: [
-          {
-            id: "MiniMax-M2.1",
-            name: "MiniMax M2.1",
-            reasoning: false,
-            input: ["text"],
-            cost: { input: 15, output: 60, cacheRead: 2, cacheWrite: 10 },
-            contextWindow: 200000,
-            maxTokens: 8192
-          }
-        ]
-      },
-
-      // Moonshot (Kimi)
-      "moonshot": {
-        baseUrl: "https://api.moonshot.ai/v1",
-        apiKey: "${MOONSHOT_API_KEY}",
-        api: "openai-completions",
-        models: [
-          {
-            id: "kimi-k2-0905-preview",
-            name: "Kimi K2",
-            contextWindow: 256000,
-            maxTokens: 8192
-          }
-        ]
-      },
-
-      // Cerebras
-      "cerebras": {
-        baseUrl: "https://api.cerebras.ai/v1",
-        apiKey: "${CEREBRAS_API_KEY}",
-        api: "openai-completions",
-        models: [
-          { id: "zai-glm-4.7", name: "GLM 4.7 (Cerebras)" },
-          { id: "zai-glm-4.6", name: "GLM 4.6 (Cerebras)" }
-        ]
-      }
-    }
-  }
-}
-```
-
-### Auth Profiles
-
-```json5
-{
-  auth: {
-    profiles: {
-      "anthropic:me@example.com": {
-        provider: "anthropic",
-        mode: "oauth",
-        email: "me@example.com"
-      },
-      "anthropic:work": {
-        provider: "anthropic",
-        mode: "api_key"
-      }
-    },
-    order: {
-      anthropic: ["anthropic:me@example.com", "anthropic:work"]
-    }
-  }
-}
-```
-
-### Environment Variables for Providers
-
-| Variable | Provider |
-|----------|----------|
-| `ANTHROPIC_API_KEY` | Anthropic |
-| `OPENAI_API_KEY` | OpenAI |
-| `GOOGLE_API_KEY` / `GEMINI_API_KEY` | Google |
-| `OPENROUTER_API_KEY` | OpenRouter |
-| `ZAI_API_KEY` / `Z_AI_API_KEY` | Z.AI |
-| `MINIMAX_API_KEY` | MiniMax |
-| `OPENCODE_API_KEY` | OpenCode Zen |
-| `GROQ_API_KEY` | Groq |
-| `BRAVE_API_KEY` | Brave Search |
-| `FIRECRAWL_API_KEY` | Firecrawl |
-| `ELEVENLABS_API_KEY` / `XI_API_KEY` | ElevenLabs |
-
----
-
-## Webhooks & Automation
-
-### Hooks Configuration
-
-```json5
-{
-  hooks: {
-    enabled: true,
-    token: "shared-secret",
-    path: "/hooks",
-    maxBodyBytes: 262144,             // 256 KB
-
-    presets: ["gmail"],
-    transformsDir: "~/.clawdbot/hooks",
-
-    mappings: [
-      {
-        match: { path: "gmail" },     // Or { source: "gmail" }
-        action: "agent",
-        wakeMode: "now",              // "now" | "next-heartbeat"
-        name: "Gmail",
-        sessionKey: "hook:gmail:{{messages[0].id}}",
-        messageTemplate: "From: {{messages[0].from}}\nSubject: {{messages[0].subject}}\n{{messages[0].snippet}}",
-        deliver: true,
-        channel: "last",              // "last" | "whatsapp" | "telegram" | etc.
-        to: "+15555550123",           // Optional recipient
-        model: "openai/gpt-5.2-mini",
-        thinking: "off",
-        timeoutSeconds: 60
-      },
-      {
-        match: { path: "custom" },
-        action: "agent",
-        transform: "custom-transform.js"
-      }
-    ],
-
-    // Gmail helper config
-    gmail: {
-      account: "clawdbot@gmail.com",
-      topic: "projects/<project-id>/topics/gog-gmail-watch",
-      subscription: "gog-gmail-watch-push",
-      pushToken: "shared-push-token",
-      hookUrl: "http://127.0.0.1:18789/hooks/gmail",
-      includeBody: true,
-      maxBytes: 20000,
-      renewEveryMinutes: 720,
-      model: "openrouter/meta-llama/llama-3.3-70b-instruct:free",
-      thinking: "off",
-      serve: { bind: "127.0.0.1", port: 8788, path: "/" },
-      tailscale: { mode: "funnel", path: "/gmail-pubsub" }
-    }
-  }
-}
-```
-
-**Webhook Endpoints:**
-- `POST /hooks/wake` - Wake agent: `{ text, mode?: "now"|"next-heartbeat" }`
-- `POST /hooks/agent` - Send to agent: `{ message, name?, sessionKey?, wakeMode?, deliver?, channel?, to?, model?, thinking?, timeoutSeconds? }`
-- `POST /hooks/<name>` - Custom mapped hooks
-
-**Authentication:**
-- `Authorization: Bearer <token>`
-- `x-clawdbot-token: <token>`
-- `?token=<token>`
-
-### Cron Configuration
-
-```json5
-{
-  cron: {
-    enabled: true,
-    maxConcurrentRuns: 2
-  }
-}
-```
-
----
-
-## Message Handling Configuration
-
-### Message Settings
-
-```json5
-{
+```typescript
+interface DiscordConfig {
+  enabled: boolean;
+  token: string;                            // Bot token
+
+  // Access control
+  accessPolicy: {
+    dmPolicy: "pairing" | "allowlist" | "open" | "disabled";
+    allowedUsers: string[];                 // Discord user IDs or usernames
+    guildPolicy: "allowlist" | "open" | "disabled";
+    allowedGuilds: {
+      [guildId: string]: {
+        requireMention: boolean;
+        allowedChannels?: string[];         // Channel IDs or names
+        allowedUsers?: string[];            // Guild-specific allowlist
+      };
+    };
+  };
+
+  // Features
+  features: {
+    typingIndicator: boolean;
+    ackReaction: string | null;             // Emoji to react with
+    useEmbeds: boolean;                     // Rich embeds for responses
+    useThreads: boolean;                    // Reply in threads
+  };
+
+  // Message handling
   messages: {
-    // Response prefix
-    responsePrefix: "🦞",             // Or "auto" for identity.name
-    // Template variables: {model}, {modelFull}, {provider}, {thinkingLevel}, {identity.name}
+    maxLength: number;                      // Default: 2000 (Discord limit)
+    historyLimit: number;
+  };
 
-    // Ack reactions
-    ackReaction: "👀",
-    ackReactionScope: "group-mentions", // "group-mentions" | "group-all" | "direct" | "all"
-    removeAckAfterReply: false,
+  // Slash commands (A2I2 memory operations)
+  commands: {
+    enabled: boolean;
+    register: {
+      recall: boolean;                      // /recall <query>
+      learn: boolean;                       // /learn <statement>
+      status: boolean;                      // /status
+      preferences: boolean;                 // /preferences
+    };
+  };
+}
+```
 
-    // Message queue
-    queue: {
-      mode: "collect",                // "steer" | "followup" | "collect" | "steer-backlog" | "interrupt"
-      debounceMs: 1000,
-      cap: 20,
-      drop: "summarize",              // "old" | "new" | "summarize"
-      byChannel: {
-        whatsapp: "collect",
-        telegram: "collect",
-        discord: "collect"
-      }
-    },
+### Discord Adapter Implementation
 
-    // Inbound debouncing
-    inbound: {
-      debounceMs: 2000,
-      byChannel: {
-        whatsapp: 5000,
-        slack: 1500,
-        discord: 1500
-      }
-    },
+```typescript
+import {
+  Client,
+  GatewayIntentBits,
+  Message,
+  Events,
+  REST,
+  Routes,
+  SlashCommandBuilder
+} from "discord.js";
 
-    // Group chat history
-    groupChat: {
-      historyLimit: 50
-    },
+class DiscordAdapter extends BaseChannelAdapter {
+  readonly name = "discord";
+  readonly type = "messaging" as const;
 
-    // Text-to-speech
-    tts: {
-      auto: "always",                 // "off" | "always" | "inbound" | "tagged"
-      mode: "final",                  // "final" | "all"
-      provider: "elevenlabs",
-      summaryModel: "openai/gpt-4.1-mini",
-      modelOverrides: { enabled: true },
-      maxTextLength: 4000,
-      timeoutMs: 30000,
-      prefsPath: "~/.clawdbot/settings/tts.json",
+  private client: Client | null = null;
 
-      elevenlabs: {
-        apiKey: "elevenlabs_api_key",
-        baseUrl: "https://api.elevenlabs.io",
-        voiceId: "voice_id",
-        modelId: "eleven_multilingual_v2",
-        seed: 42,
-        applyTextNormalization: "auto",
-        languageCode: "en",
-        voiceSettings: {
-          stability: 0.5,
-          similarityBoost: 0.75,
-          style: 0.0,
-          useSpeakerBoost: true,
-          speed: 1.0
-        }
-      },
+  constructor(config: DiscordConfig) {
+    super(config);
+  }
 
-      openai: {
-        apiKey: "openai_api_key",
-        model: "gpt-4o-mini-tts",
-        voice: "alloy"
-      }
+  async connect(): Promise<void> {
+    this.client = new Client({
+      intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMessageReactions,
+      ],
+    });
+
+    // Register slash commands
+    if (this.config.commands.enabled) {
+      await this.registerSlashCommands();
     }
-  },
 
-  // Talk mode defaults (macOS/iOS/Android)
-  talk: {
-    voiceId: "elevenlabs_voice_id",
-    voiceAliases: {
-      Clawd: "EXAVITQu4vr4xnSDxMaL",
-      Roger: "CwhRBWXzGAHq8TQ4Fs17"
-    },
-    modelId: "eleven_v3",
-    outputFormat: "mp3_44100_128",
-    apiKey: "elevenlabs_api_key",
-    interruptOnSpeech: true
+    // Handle messages
+    this.client.on(Events.MessageCreate, async (msg) => {
+      if (msg.author.bot) return;           // Ignore bots
+      await this.handleMessage(msg);
+    });
+
+    // Handle slash commands
+    this.client.on(Events.InteractionCreate, async (interaction) => {
+      if (!interaction.isChatInputCommand()) return;
+      await this.handleSlashCommand(interaction);
+    });
+
+    // Connect
+    await this.client.login(this.config.token);
+    this.connected = true;
+    console.log("Discord connected");
+  }
+
+  private async registerSlashCommands(): Promise<void> {
+    const commands = [];
+
+    if (this.config.commands.register.recall) {
+      commands.push(
+        new SlashCommandBuilder()
+          .setName("recall")
+          .setDescription("Search A2I2 knowledge graph")
+          .addStringOption(option =>
+            option.setName("query")
+              .setDescription("What to search for")
+              .setRequired(true)
+          )
+      );
+    }
+
+    if (this.config.commands.register.learn) {
+      commands.push(
+        new SlashCommandBuilder()
+          .setName("learn")
+          .setDescription("Teach A2I2 something new")
+          .addStringOption(option =>
+            option.setName("fact")
+              .setDescription("The fact to remember")
+              .setRequired(true)
+          )
+      );
+    }
+
+    if (this.config.commands.register.status) {
+      commands.push(
+        new SlashCommandBuilder()
+          .setName("status")
+          .setDescription("Check A2I2 memory and trust status")
+      );
+    }
+
+    if (this.config.commands.register.preferences) {
+      commands.push(
+        new SlashCommandBuilder()
+          .setName("preferences")
+          .setDescription("View learned preferences")
+      );
+    }
+
+    // Register commands
+    const rest = new REST({ version: "10" }).setToken(this.config.token);
+    await rest.put(
+      Routes.applicationCommands(this.client!.user!.id),
+      { body: commands.map(c => c.toJSON()) }
+    );
+  }
+
+  private async handleMessage(msg: Message): Promise<void> {
+    if (!this.messageHandler) return;
+
+    const chatId = msg.channel.id;
+    const isGuild = msg.guild !== null;
+    const guildId = msg.guild?.id;
+
+    // Check access
+    const access = this.checkDiscordAccess(msg);
+    if (!access.allowed) {
+      if (access.reason === "pairing_required") {
+        await msg.reply(`Pairing required. Code: \`${access.pairingCode}\``);
+      }
+      return;
+    }
+
+    // Check mention requirement for guilds
+    if (isGuild && this.requiresMention(guildId!)) {
+      const mentioned = msg.mentions.users.has(this.client!.user!.id);
+      if (!mentioned) return;
+    }
+
+    // Ack reaction
+    if (this.config.features.ackReaction) {
+      await msg.react(this.config.features.ackReaction);
+    }
+
+    // Typing indicator
+    if (this.config.features.typingIndicator) {
+      await msg.channel.sendTyping();
+    }
+
+    // Normalize and forward
+    const normalized = this.normalizeMessage(msg);
+    await this.messageHandler(normalized);
+  }
+
+  private normalizeMessage(msg: Message): InboundMessage {
+    const isGuild = msg.guild !== null;
+
+    return {
+      id: msg.id,
+      timestamp: msg.createdAt,
+      channel: "discord",
+      chatId: msg.channel.id,
+      chatType: isGuild ? "group" : "dm",
+      sender: {
+        id: this.normalizeUserId(msg.author.id),
+        discordId: msg.author.id,
+        displayName: msg.author.displayName || msg.author.username,
+      },
+      content: {
+        text: this.stripMentions(msg.content),
+        attachments: msg.attachments.map(a => ({
+          type: this.getAttachmentType(a.contentType),
+          url: a.url,
+        })),
+        replyTo: msg.reference ? {
+          messageId: msg.reference.messageId || "",
+        } : undefined,
+      },
+    };
+  }
+
+  async send(message: OutboundMessage): Promise<SendResult> {
+    if (!this.client) {
+      return { success: false, error: "Not connected" };
+    }
+
+    try {
+      const channel = await this.client.channels.fetch(message.chatId);
+      if (!channel?.isTextBased()) {
+        return { success: false, error: "Invalid channel" };
+      }
+
+      // Chunk long messages
+      const chunks = this.chunkMessage(message.content, this.config.messages.maxLength);
+
+      for (const chunk of chunks) {
+        if (this.config.features.useEmbeds) {
+          await (channel as any).send({
+            embeds: [{
+              description: chunk,
+              color: 0x7C3AED,               // A2I2 purple
+            }],
+          });
+        } else {
+          await (channel as any).send(chunk);
+        }
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  async sendTypingIndicator(chatId: string): Promise<void> {
+    const channel = await this.client?.channels.fetch(chatId);
+    if (channel?.isTextBased()) {
+      await (channel as any).sendTyping();
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    await this.client?.destroy();
+    this.connected = false;
+  }
+
+  // Discord-specific access control
+  private checkDiscordAccess(msg: Message): AccessDecision {
+    const userId = msg.author.id;
+    const isGuild = msg.guild !== null;
+    const guildId = msg.guild?.id;
+
+    if (isGuild) {
+      // Guild access
+      const guildConfig = this.config.accessPolicy.allowedGuilds[guildId!];
+      if (this.config.accessPolicy.guildPolicy === "allowlist" && !guildConfig) {
+        return { allowed: false, reason: "Guild not in allowlist" };
+      }
+      if (guildConfig?.allowedUsers && !guildConfig.allowedUsers.includes(userId)) {
+        return { allowed: false, reason: "User not allowed in this guild" };
+      }
+      if (guildConfig?.allowedChannels && !guildConfig.allowedChannels.includes(msg.channel.id)) {
+        return { allowed: false, reason: "Channel not allowed" };
+      }
+    } else {
+      // DM access
+      return this.checkAccess(userId, msg.channel.id);
+    }
+
+    return { allowed: true };
+  }
+
+  private requiresMention(guildId: string): boolean {
+    return this.config.accessPolicy.allowedGuilds[guildId]?.requireMention ?? true;
+  }
+
+  private stripMentions(content: string): string {
+    return content.replace(/<@!?\d+>/g, "").trim();
+  }
+
+  private getAttachmentType(contentType: string | null): string {
+    if (!contentType) return "file";
+    if (contentType.startsWith("image/")) return "image";
+    if (contentType.startsWith("audio/")) return "audio";
+    if (contentType.startsWith("video/")) return "video";
+    return "file";
+  }
+
+  private chunkMessage(text: string, maxLength: number): string[] {
+    if (text.length <= maxLength) return [text];
+
+    const chunks: string[] = [];
+    let remaining = text;
+
+    while (remaining.length > 0) {
+      if (remaining.length <= maxLength) {
+        chunks.push(remaining);
+        break;
+      }
+
+      let breakPoint = remaining.lastIndexOf("\n", maxLength);
+      if (breakPoint === -1) breakPoint = remaining.lastIndexOf(" ", maxLength);
+      if (breakPoint === -1) breakPoint = maxLength;
+
+      chunks.push(remaining.slice(0, breakPoint));
+      remaining = remaining.slice(breakPoint).trim();
+    }
+
+    return chunks;
+  }
+
+  async getChatContext(chatId: string): Promise<ChatContext> {
+    const channel = await this.client?.channels.fetch(chatId);
+    if (channel?.isTextBased() && "guild" in channel && channel.guild) {
+      return {
+        chatId,
+        chatType: "group",
+        name: channel.name || undefined,
+        guildName: channel.guild.name,
+      };
+    }
+    return { chatId, chatType: "dm" };
+  }
+
+  async getUserIdentity(userId: string): Promise<UserIdentity> {
+    const user = await this.client?.users.fetch(userId);
+    return {
+      id: this.normalizeUserId(userId),
+      channel: "discord",
+      discordId: userId,
+      displayName: user?.displayName || user?.username,
+    };
   }
 }
 ```
 
 ---
 
-## CLI Commands Reference
+## Siri/Webhook Integration Design
 
-### Gateway Commands
+### Siri Shortcut Flow
 
-```bash
-# Start gateway
-clawdbot gateway
-clawdbot gateway --port 18789 --verbose
-clawdbot gateway --force
-
-# Gateway management
-clawdbot gateway status
-clawdbot gateway status --deep
-clawdbot gateway restart
-clawdbot gateway stop
-
-# Logs
-clawdbot logs
-clawdbot logs --follow
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  Siri Shortcuts Integration                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   User: "Hey Siri, ask Arcus about my meeting tomorrow"         │
+│                         │                                        │
+│                         ▼                                        │
+│   ┌─────────────────────────────────────────┐                   │
+│   │         iOS Shortcut: "Ask Arcus"        │                   │
+│   │  1. Dictate Text → captured query        │                   │
+│   │  2. Get Contents of URL                  │                   │
+│   │     POST https://arcus.api/siri          │                   │
+│   │     { query, deviceId }                  │                   │
+│   │  3. Get Dictionary Value → response      │                   │
+│   │  4. Speak Text → spoken response         │                   │
+│   └─────────────────────────────────────────┘                   │
+│                         │                                        │
+│                         ▼                                        │
+│   ┌─────────────────────────────────────────┐                   │
+│   │         Arcus Gateway /siri              │                   │
+│   │  • Authenticate (device ID + token)      │                   │
+│   │  • Inject memory context                 │                   │
+│   │  • Route to model                        │                   │
+│   │  • Return JSON response                  │                   │
+│   └─────────────────────────────────────────┘                   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Channel Commands
+### Siri Webhook Configuration
 
-```bash
-# Status
-clawdbot channels status
-clawdbot channels status --probe
+```typescript
+interface SiriWebhookConfig {
+  enabled: boolean;
+  path: string;                             // "/siri" or "/hooks/siri"
 
-# WhatsApp
-clawdbot channels login
-clawdbot channels login --account personal
-clawdbot channels logout
-clawdbot channels logout --account personal
+  // Authentication
+  auth: {
+    mode: "token" | "device" | "both";
+    tokens?: string[];                      // Static API tokens
+    allowedDevices?: string[];              // Device IDs (from Shortcuts)
+  };
 
-# Pairing
-clawdbot pairing list whatsapp
-clawdbot pairing approve whatsapp <code>
-clawdbot pairing list telegram
-clawdbot pairing approve telegram <code>
+  // Response format
+  response: {
+    maxLength: number;                      // Siri speaks better with shorter responses
+    includeSummary: boolean;                // Include brief summary for speech
+    includeFullText: boolean;               // Include full text for display
+  };
+
+  // A2I2 Memory commands via Siri
+  commands: {
+    recall: {
+      enabled: boolean;
+      trigger: string[];                    // ["ask arcus", "what does arcus know"]
+    };
+    learn: {
+      enabled: boolean;
+      trigger: string[];                    // ["arcus remember", "teach arcus"]
+    };
+    status: {
+      enabled: boolean;
+      trigger: string[];                    // ["arcus status"]
+    };
+  };
+}
 ```
 
-### Configuration Commands
+### Siri Webhook Adapter Implementation
 
-```bash
-# Configure
-clawdbot configure
-clawdbot configure --section web
+```typescript
+import express, { Request, Response } from "express";
 
-# Onboarding
-clawdbot onboard
-clawdbot onboard:web
-clawdbot onboard --auth-choice anthropic
+class SiriWebhookAdapter extends BaseChannelAdapter {
+  readonly name = "siri";
+  readonly type = "webhook" as const;
 
-# Doctor
-clawdbot doctor
-clawdbot doctor --fix
-clawdbot doctor --yes
-```
+  private app: express.Application | null = null;
 
-### Message Commands
+  constructor(config: SiriWebhookConfig) {
+    super(config);
+  }
 
-```bash
-# Send messages
-clawdbot send "Hello"
-clawdbot message send --media <path-or-url> --message <caption>
-clawdbot message send --media <mp4> --gif-playback
-```
+  async connect(): Promise<void> {
+    // Note: This adapter is mounted on the gateway's HTTP server
+    // The gateway calls registerRoutes() after initialization
+    this.connected = true;
+  }
 
-### Model Commands
+  // Register routes on gateway's HTTP server
+  registerRoutes(app: express.Application): void {
+    app.post(this.config.path, this.handleSiriRequest.bind(this));
+  }
 
-```bash
-clawdbot models auth setup-token --provider anthropic
-```
+  private async handleSiriRequest(req: Request, res: Response): Promise<void> {
+    try {
+      const { query, deviceId, shortcutName } = req.body;
 
-### RPC Commands
+      // Authenticate
+      const authResult = this.authenticateRequest(req, deviceId);
+      if (!authResult.success) {
+        res.status(401).json({ error: authResult.error });
+        return;
+      }
 
-```bash
-# Gateway RPC calls
-clawdbot gateway call config.get --params '{}'
-clawdbot gateway call config.apply --params '{...}'
-clawdbot gateway call config.patch --params '{...}'
-```
+      // Check for special A2I2 commands
+      const command = this.detectCommand(query);
 
-### Profiles
+      // Create normalized message
+      const message: InboundMessage = {
+        id: `siri-${Date.now()}`,
+        timestamp: new Date(),
+        channel: "siri",
+        chatId: deviceId || "siri-default",
+        chatType: "dm",
+        sender: {
+          id: this.normalizeUserId(deviceId || "anonymous"),
+          deviceId: deviceId,
+        },
+        content: {
+          text: query,
+        },
+        // Flag special commands
+        metadata: command ? { command: command.type, ...command.params } : undefined,
+      };
 
-```bash
-# Development profile
-clawdbot --dev gateway       # Uses ~/.clawdbot-dev, port 19001+
+      // Forward to gateway
+      if (this.messageHandler) {
+        await this.messageHandler(message);
+      }
 
-# Custom profile
-clawdbot --profile work gateway  # Uses ~/.clawdbot-work
-```
+      // Wait for response (simplified - real impl would use async response queue)
+      // For now, we'll process synchronously
+      const response = await this.processAndWaitForResponse(message);
 
----
+      // Format for Siri
+      const siriResponse = this.formatSiriResponse(response);
 
-## A2I2 Implementation Checklist
+      res.json(siriResponse);
 
-### Phase 1: Foundation
+    } catch (error) {
+      console.error("Siri webhook error:", error);
+      res.status(500).json({
+        response: "I encountered an error processing your request.",
+        error: String(error),
+      });
+    }
+  }
 
-- [ ] Install Clawdbot: `curl -fsSL https://clawd.bot/install.sh | bash`
-- [ ] Run onboarding: `clawdbot onboard`
-- [ ] Configure Anthropic API key
-- [ ] Set workspace to A2I2 directory
-- [ ] Create `AGENTS.md` with A2I2 memory operations
-- [ ] Create `SOUL.md` with A2I2 personality
-- [ ] Create `MEMORY.md` for semantic memory index
-- [ ] Test basic functionality: `clawdbot send "Test"`
+  private authenticateRequest(req: Request, deviceId?: string): { success: boolean; error?: string } {
+    const config = this.config.auth;
 
-### Phase 2: Channel Setup
+    // Token auth
+    if (config.mode === "token" || config.mode === "both") {
+      const token = req.headers.authorization?.replace("Bearer ", "") ||
+                    req.headers["x-arcus-token"] ||
+                    req.query.token;
 
-- [ ] Configure WhatsApp channel
-  - [ ] Set `dmPolicy: "allowlist"`
-  - [ ] Add allowed phone numbers
-  - [ ] Test QR code login
-- [ ] Configure Telegram channel (optional)
-  - [ ] Create bot via BotFather
-  - [ ] Set bot token
-  - [ ] Configure groups
-- [ ] Configure Discord channel (optional)
-  - [ ] Create Discord application
-  - [ ] Enable required intents
-  - [ ] Configure guilds and channels
-
-### Phase 3: Memory Integration
-
-- [ ] Configure session persistence
-  - [ ] Set `dmScope: "per-peer"` for cross-channel identity
-  - [ ] Configure `identityLinks` for user mapping
-  - [ ] Set appropriate reset policy
-- [ ] Configure memory flush
-  - [ ] Enable `compaction.memoryFlush`
-  - [ ] Set prompt for A2I2 LEARN operation
-  - [ ] Configure `softThresholdTokens`
-- [ ] Configure heartbeat for REFLECT operation
-  - [ ] Set `heartbeat.every`
-  - [ ] Configure `HEARTBEAT.md` with reflection prompt
-
-### Phase 4: Agent Configuration
-
-- [ ] Configure multi-agent if needed
-  - [ ] Define agent list with identities
-  - [ ] Set up bindings for routing
-  - [ ] Configure per-agent tools
-- [ ] Configure tools
-  - [ ] Enable `memory_search` tool
-  - [ ] Set appropriate tool profile
-  - [ ] Configure sandbox for untrusted sessions
-- [ ] Configure model settings
-  - [ ] Set primary model (Claude Opus recommended)
-  - [ ] Configure fallbacks
-  - [ ] Set thinking level
-
-### Phase 5: Testing & Validation
-
-- [ ] Test memory capture (LEARN)
-- [ ] Test memory recall (RECALL)
-- [ ] Test entity relationships (RELATE)
-- [ ] Test periodic reflection (REFLECT)
-- [ ] Test cross-channel memory persistence
-- [ ] Test session reset behavior
-- [ ] Run `clawdbot doctor` for validation
-
----
-
-## Quick Reference
-
-### Minimal A2I2 Configuration
-
-```json5
-{
-  agents: {
-    defaults: {
-      workspace: "~/a2i2",
-      model: { primary: "anthropic/claude-opus-4-5" },
-      compaction: {
-        mode: "safeguard",
-        memoryFlush: {
-          enabled: true,
-          softThresholdTokens: 6000,
-          prompt: "Store important learnings to memory/YYYY-MM-DD.md. Include: user preferences, decisions, new information. Reply NO_REPLY if nothing to store."
-        }
-      },
-      heartbeat: {
-        every: "30m",
-        prompt: "Read HEARTBEAT.md. Run REFLECT operation if significant learnings accumulated. Reply HEARTBEAT_OK if nothing needs attention."
+      if (config.tokens && !config.tokens.includes(token as string)) {
+        return { success: false, error: "Invalid token" };
       }
     }
-  },
 
-  session: {
-    dmScope: "per-peer",
-    reset: { mode: "idle", idleMinutes: 1440 }
-  },
-
-  channels: {
-    whatsapp: {
-      dmPolicy: "allowlist",
-      allowFrom: ["+15555550123"]
+    // Device auth
+    if (config.mode === "device" || config.mode === "both") {
+      if (config.allowedDevices && !config.allowedDevices.includes(deviceId || "")) {
+        return { success: false, error: "Device not authorized" };
+      }
     }
-  },
 
-  tools: {
-    profile: "coding",
-    allow: ["memory_search", "memory_get"]
+    return { success: true };
+  }
+
+  private detectCommand(query: string): { type: string; params: any } | null {
+    const lowerQuery = query.toLowerCase();
+    const commands = this.config.commands;
+
+    // Recall command
+    if (commands.recall.enabled) {
+      for (const trigger of commands.recall.trigger) {
+        if (lowerQuery.includes(trigger)) {
+          return {
+            type: "recall",
+            params: { query: query.replace(new RegExp(trigger, "i"), "").trim() },
+          };
+        }
+      }
+    }
+
+    // Learn command
+    if (commands.learn.enabled) {
+      for (const trigger of commands.learn.trigger) {
+        if (lowerQuery.includes(trigger)) {
+          return {
+            type: "learn",
+            params: { fact: query.replace(new RegExp(trigger, "i"), "").trim() },
+          };
+        }
+      }
+    }
+
+    // Status command
+    if (commands.status.enabled) {
+      for (const trigger of commands.status.trigger) {
+        if (lowerQuery.includes(trigger)) {
+          return { type: "status", params: {} };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private formatSiriResponse(response: string): SiriWebhookResponse {
+    const maxLength = this.config.response.maxLength || 500;
+
+    // Shorten for speech
+    let speechText = response;
+    if (speechText.length > maxLength) {
+      speechText = speechText.slice(0, maxLength - 3) + "...";
+    }
+
+    return {
+      response: speechText,                 // Siri speaks this
+      displayText: this.config.response.includeFullText ? response : undefined,
+      success: true,
+    };
+  }
+
+  // Simplified - real implementation would use event-based response
+  private async processAndWaitForResponse(message: InboundMessage): Promise<string> {
+    // This would integrate with the gateway's response queue
+    return "Response from A2I2 gateway";
+  }
+
+  async send(message: OutboundMessage): Promise<SendResult> {
+    // Webhook adapter doesn't send - responses are returned inline
+    return { success: true };
+  }
+
+  async disconnect(): Promise<void> {
+    this.connected = false;
+  }
+
+  async getChatContext(chatId: string): Promise<ChatContext> {
+    return { chatId, chatType: "dm" };
+  }
+
+  async getUserIdentity(userId: string): Promise<UserIdentity> {
+    return {
+      id: this.normalizeUserId(userId),
+      channel: "siri",
+      deviceId: userId,
+    };
+  }
+}
+
+// Response types
+interface SiriWebhookRequest {
+  query: string;
+  deviceId?: string;
+  shortcutName?: string;
+  timestamp?: string;
+}
+
+interface SiriWebhookResponse {
+  response: string;                         // Text for Siri to speak
+  displayText?: string;                     // Full text for notification
+  success: boolean;
+  error?: string;
+}
+```
+
+### iOS Shortcut Template
+
+```
+Shortcut Name: "Ask Arcus"
+
+Actions:
+1. Dictate Text
+   - Stop Listening: After Pause
+   - Language: Default
+   → Save to variable "Query"
+
+2. URL
+   - https://your-arcus-gateway.example.com/siri
+
+3. Get Contents of URL
+   - Method: POST
+   - Headers:
+     - Authorization: Bearer YOUR_API_TOKEN
+     - Content-Type: application/json
+   - Request Body: JSON
+     {
+       "query": [Query variable],
+       "deviceId": [Get Device Details → Name],
+       "shortcutName": "Ask Arcus"
+     }
+   → Save to variable "Response"
+
+4. Get Dictionary Value
+   - Key: response
+   - Dictionary: [Response variable]
+   → Save to variable "Answer"
+
+5. Speak Text
+   - Text: [Answer variable]
+   - Rate: Default
+   - Voice: Siri voice
+
+6. Show Notification (Optional)
+   - Title: Arcus
+   - Body: [Answer variable]
+```
+
+---
+
+## Security & Access Control
+
+### Access Control Design
+
+```typescript
+// Unified access control across all channels
+interface AccessControlConfig {
+  // Default policy
+  defaultPolicy: {
+    dmPolicy: "pairing" | "allowlist" | "open" | "disabled";
+    groupPolicy: "allowlist" | "open" | "disabled";
+  };
+
+  // Pairing system
+  pairing: {
+    enabled: boolean;
+    codeLength: number;                     // Default: 6
+    expiryMinutes: number;                  // Default: 60
+    maxPending: number;                     // Max pending requests per channel
+  };
+
+  // Master allowlist (cross-channel)
+  masterAllowlist: {
+    users: string[];                        // Canonical user IDs
+    admins: string[];                       // Can approve pairings
+  };
+
+  // A2I2 Trust Integration
+  trustIntegration: {
+    enabled: boolean;
+    minTrustForDM: AutonomyLevel;           // L0 by default
+    minTrustForGroup: AutonomyLevel;        // L0 by default
+    autoElevatePaired: boolean;             // Paired users start at L1
+  };
+}
+```
+
+### Pairing Flow
+
+```typescript
+// Pairing request management
+class PairingManager {
+  private pendingRequests: Map<string, PairingRequest> = new Map();
+
+  async createPairingRequest(
+    userId: string,
+    channel: string
+  ): Promise<string> {
+    const code = this.generateCode();
+    const request: PairingRequest = {
+      userId,
+      channel,
+      code,
+      requestedAt: new Date(),
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+      status: "pending",
+    };
+
+    this.pendingRequests.set(code, request);
+    return code;
+  }
+
+  async approvePairing(code: string, approvedBy: string): Promise<boolean> {
+    const request = this.pendingRequests.get(code);
+    if (!request || request.status !== "pending") {
+      return false;
+    }
+
+    if (request.expiresAt < new Date()) {
+      request.status = "expired";
+      return false;
+    }
+
+    request.status = "approved";
+
+    // Add to allowlist
+    await this.addToAllowlist(request.userId, request.channel);
+
+    // Log to ATL
+    await this.trustLedger.logPairingApproval({
+      userId: request.userId,
+      approvedBy,
+      channel: request.channel,
+    });
+
+    return true;
+  }
+
+  private generateCode(): string {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No ambiguous chars
+    let code = "";
+    for (let i = 0; i < 6; i++) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return code;
   }
 }
 ```
 
 ---
 
-*This technical reference was compiled from the official Clawdbot documentation at https://docs.clawd.bot/ for A2I2 implementation planning.*
+## A2I2 Concept Mapping
+
+### Memory Integration
+
+| A2I2 Memory Type | Channel Integration |
+|------------------|---------------------|
+| **Episodic** | Every message logged with channel/sender context |
+| **Semantic** | Facts extracted from conversations, stored with source |
+| **Procedural** | Workflow preferences learned from user corrections |
+| **Working** | Current session context, injected per-message |
+| **Relational** | Entity mentions extracted and linked to knowledge graph |
+
+### Memory Context Injection
+
+```typescript
+// Inject memory context before each AI response
+async function injectMemoryContext(
+  message: InboundMessage,
+  memoryLayer: A2I2MemoryLayer
+): Promise<InboundMessage> {
+
+  // 1. Get recent episodic memories (what happened recently)
+  const recentEpisodes = await memoryLayer.queryEpisodic({
+    userId: message.sender.id,
+    limit: 10,
+    since: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+  });
+
+  // 2. Get relevant semantic facts (based on message content)
+  const relevantFacts = await memoryLayer.querySemantic({
+    query: message.content.text,
+    limit: 20,
+  });
+
+  // 3. Get user's procedural preferences
+  const userPreferences = await memoryLayer.queryProcedural({
+    userId: message.sender.id,
+    category: "preferences",
+  });
+
+  // 4. Extract entities and get relationships
+  const entities = extractEntities(message.content.text);
+  const relationships = await memoryLayer.queryKnowledgeGraph({
+    entities: entities,
+    depth: 2,
+  });
+
+  // 5. Inject into message
+  message.memoryContext = {
+    recentEpisodes,
+    relevantSemantics: relevantFacts,
+    userPreferences,
+    entityRelationships: relationships,
+  };
+
+  return message;
+}
+```
+
+### Autonomy Trust Ledger Integration
+
+```typescript
+// Log all channel interactions to ATL
+interface ATLChannelLog {
+  userId: string;
+  channel: string;
+  action: "message_received" | "response_sent" | "command_executed" | "learning_captured";
+  autonomyLevel: AutonomyLevel;
+  details: {
+    messageId?: string;
+    commandType?: string;
+    learningType?: string;
+  };
+  timestamp: Date;
+  successful: boolean;
+}
+
+// Trust-based action gating
+async function checkTrustForAction(
+  userId: string,
+  action: string,
+  trustLedger: AutonomyTrustLedger
+): Promise<{ allowed: boolean; reason?: string }> {
+
+  const userTrust = await trustLedger.getUserTrust(userId);
+
+  // Define required trust levels for actions
+  const trustRequirements: Record<string, AutonomyLevel> = {
+    "read_memory": "L0",
+    "basic_conversation": "L0",
+    "learn_fact": "L1",
+    "modify_preference": "L1",
+    "execute_workflow": "L2",
+    "modify_knowledge_graph": "L2",
+    "autonomous_action": "L3",
+  };
+
+  const required = trustRequirements[action] || "L0";
+
+  if (compareTrustLevels(userTrust.level, required) < 0) {
+    return {
+      allowed: false,
+      reason: `Action requires ${required}, user has ${userTrust.level}`,
+    };
+  }
+
+  return { allowed: true };
+}
+```
+
+### Memory Operations via Chat Commands
+
+| Command | A2I2 Operation | Description |
+|---------|----------------|-------------|
+| `/recall <query>` | RECALL | Search knowledge graph |
+| `/learn <fact>` | LEARN | Capture explicit knowledge |
+| `/forget <topic>` | (delete) | Request knowledge removal |
+| `/preferences` | RECALL | Show learned preferences |
+| `/status` | (query) | Show memory stats + trust level |
+| `/reflect` | REFLECT | Trigger pattern synthesis |
+| `/new` | (reset) | Start fresh session (memory persists) |
+
+---
+
+## Implementation Roadmap
+
+### Phase 1: Foundation (Weeks 1-2)
+
+- [ ] **Gateway Core**
+  - [ ] WebSocket + HTTP server setup
+  - [ ] Configuration schema and loading
+  - [ ] Basic logging and error handling
+
+- [ ] **Memory Layer Connection**
+  - [ ] Supabase client setup
+  - [ ] Memory query functions (RECALL)
+  - [ ] Memory write functions (LEARN)
+
+- [ ] **Siri Webhook (MVP)**
+  - [ ] HTTP endpoint for Shortcuts
+  - [ ] Basic auth (token)
+  - [ ] iOS Shortcut template
+
+### Phase 2: WhatsApp (Weeks 3-4)
+
+- [ ] **WhatsApp Adapter**
+  - [ ] Baileys integration
+  - [ ] QR code auth flow
+  - [ ] Message send/receive
+  - [ ] Access control (allowlist)
+
+- [ ] **Memory Integration**
+  - [ ] Context injection per message
+  - [ ] Episodic logging
+  - [ ] User preference tracking
+
+### Phase 3: Discord (Weeks 5-6)
+
+- [ ] **Discord Adapter**
+  - [ ] Bot creation + intents
+  - [ ] Guild/channel configuration
+  - [ ] Slash commands (/recall, /learn)
+  - [ ] Reaction-based feedback
+
+- [ ] **Multi-Channel Identity**
+  - [ ] Identity linking across channels
+  - [ ] Unified session management
+  - [ ] Cross-channel memory queries
+
+### Phase 4: Polish & ATL (Weeks 7-8)
+
+- [ ] **Autonomy Trust Ledger**
+  - [ ] Action logging
+  - [ ] Trust level tracking
+  - [ ] Trust-based gating
+
+- [ ] **Heartbeat (REFLECT)**
+  - [ ] Scheduled heartbeat
+  - [ ] Pattern synthesis
+  - [ ] Proactive notifications
+
+- [ ] **Pairing System**
+  - [ ] Pairing code generation
+  - [ ] Admin approval flow
+  - [ ] Trust elevation on pairing
+
+---
+
+## Summary
+
+This document provides the architectural blueprints for A2I2's native multi-channel gateway, inspired by Clawdbot's proven patterns:
+
+1. **Unified Gateway**: Single control plane for all channels
+2. **Channel Adapters**: Pluggable adapters for WhatsApp, Discord, Siri
+3. **Memory Integration**: A2I2's five memory types injected per-message
+4. **Trust Integration**: ATL-based access control and action gating
+5. **Identity Linking**: Same person recognized across channels
+
+**Key Differentiator**: While Clawdbot focuses on accessibility, A2I2 adds deep organizational intelligence through persistent memory, knowledge graphs, and autonomy tracking.
+
+---
+
+*"Meet users where they are, remember everything, and grow with every interaction."*
