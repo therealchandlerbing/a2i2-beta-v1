@@ -1,6 +1,6 @@
 # A2I2 Knowledge Repository Documentation Index
 
-**Last Updated**: January 25, 2026
+**Last Updated**: January 27, 2026
 **Version**: 1.0.0-beta
 
 ---
@@ -35,7 +35,8 @@
 | [PLATFORM-DESIGN.md](PLATFORM-DESIGN.md) | Interaction & access architecture |
 | [EFFICIENT-AGENTS-INTEGRATION.md](EFFICIENT-AGENTS-INTEGRATION.md) | Research synthesis for platform enhancement |
 | [CLAWDBOT-INTEGRATION.md](CLAWDBOT-INTEGRATION.md) | Multi-channel accessibility patterns from clawdbot |
-| [VOICE-ARCHITECTURE.md](VOICE-ARCHITECTURE.md) | **NEW** Progressive voice strategy: Siri MVP → PersonaPlex |
+| [A2I2-MULTI-CHANNEL-ARCHITECTURE.md](A2I2-MULTI-CHANNEL-ARCHITECTURE.md) | A2I2 multi-channel architecture: WhatsApp, Discord, Siri adapters |
+| [VOICE-ARCHITECTURE.md](VOICE-ARCHITECTURE.md) | Progressive voice strategy: Siri MVP → PersonaPlex |
 
 ---
 
@@ -218,6 +219,8 @@ A2I2 uses four core memory operations:
 
 | Date | Change |
 |:-----|:-------|
+| 2026-01-27 | Renamed to A2I2-MULTI-CHANNEL-ARCHITECTURE.md; fixed code review issues (crypto pairing codes, auth security, exponential backoff, async notes) |
+| 2026-01-26 | Added multi-channel architecture design with WhatsApp, Discord, and Siri adapter blueprints |
 | 2026-01-26 | Added VOICE-ARCHITECTURE.md - progressive voice strategy (Siri → PersonaPlex) |
 | 2026-01-26 | Added CLAWDBOT-INTEGRATION.md - multi-channel accessibility patterns |
 | 2026-01-26 | Added EFFICIENT-AGENTS-INTEGRATION.md - research synthesis from 28+ papers |
