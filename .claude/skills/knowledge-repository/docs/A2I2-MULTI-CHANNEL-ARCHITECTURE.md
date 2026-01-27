@@ -67,7 +67,7 @@ This document extracts proven architectural patterns from Clawdbot's multi-chann
 │   │                A2I2 Memory Layer                          │  │
 │   │  Episodic │ Semantic │ Procedural │ Working │ Relational │  │
 │   │    ↓           ↓          ↓           ↓          ↓       │  │
-│   │  Supabase: arcus_* tables + arcus_knowledge_graph        │  │
+│   │  Supabase: arcus_* tables (entities + relationships)     │  │
 │   └──────────────────────────────────────────────────────────┘  │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘

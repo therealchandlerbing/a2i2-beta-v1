@@ -1565,8 +1565,8 @@ See **[VERCEL-NEON-INTEGRATION.md](docs/VERCEL-NEON-INTEGRATION.md)** for comple
    - `arcus_episodic_memory`
    - `arcus_semantic_memory`
    - `arcus_procedural_memory`
-   - `arcus_knowledge_graph`
-   - `arcus_entities`
+   - `arcus_entities` (knowledge graph nodes)
+   - `arcus_relationships` (knowledge graph edges)
 
 </details>
 

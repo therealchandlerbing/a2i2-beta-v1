@@ -92,7 +92,7 @@ This is the **central nervous system** for the Arcus Innovation Studios workspac
 - **Entities**: People, organizations, projects, concepts
 - **Relationships**: Who knows who, what's related to what
 - **Influence**: Who affects decisions, what drives outcomes
-- **Stored in**: `arcus_knowledge_graph` table
+- **Stored in**: `arcus_entities` (nodes) + `arcus_relationships` (edges) tables
 
 ## Core Operations
 
@@ -364,16 +364,30 @@ CREATE TABLE arcus_procedural_memory (
   embedding VECTOR(1536)
 );
 
--- Knowledge graph (relationships)
-CREATE TABLE arcus_knowledge_graph (
+-- Knowledge graph: entities (nodes)
+CREATE TABLE arcus_entities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  entity1_type TEXT NOT NULL,
-  entity1_id TEXT NOT NULL,
-  entity1_name TEXT NOT NULL,
-  relationship TEXT NOT NULL,
-  entity2_type TEXT NOT NULL,
-  entity2_id TEXT NOT NULL,
-  entity2_name TEXT NOT NULL,
+  entity_type TEXT NOT NULL,  -- person, organization, project, concept
+  name TEXT NOT NULL,
+  description TEXT,
+  aliases TEXT[],
+  attributes JSONB,
+  embedding VECTOR(1536),
+  confidence FLOAT DEFAULT 0.8,
+  first_seen TIMESTAMPTZ DEFAULT NOW(),
+  last_seen TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Knowledge graph: relationships (edges)
+CREATE TABLE arcus_relationships (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_entity_id UUID NOT NULL REFERENCES arcus_entities(id),
+  source_type TEXT NOT NULL,
+  source_name TEXT NOT NULL,
+  relationship TEXT NOT NULL,  -- works_at, reports_to, owns, etc.
+  target_entity_id UUID NOT NULL REFERENCES arcus_entities(id),
+  target_type TEXT NOT NULL,
+  target_name TEXT NOT NULL,
   properties JSONB,
   confidence FLOAT DEFAULT 0.8,
   first_observed TIMESTAMPTZ DEFAULT NOW(),
@@ -385,9 +399,11 @@ CREATE INDEX idx_episodic_event_type ON arcus_episodic_memory(event_type);
 CREATE INDEX idx_episodic_timestamp ON arcus_episodic_memory(timestamp);
 CREATE INDEX idx_semantic_category ON arcus_semantic_memory(category);
 CREATE INDEX idx_procedural_type ON arcus_procedural_memory(procedure_type);
-CREATE INDEX idx_graph_entity1 ON arcus_knowledge_graph(entity1_type, entity1_id);
-CREATE INDEX idx_graph_entity2 ON arcus_knowledge_graph(entity2_type, entity2_id);
-CREATE INDEX idx_graph_relationship ON arcus_knowledge_graph(relationship);
+CREATE INDEX idx_entities_type ON arcus_entities(entity_type);
+CREATE INDEX idx_entities_name ON arcus_entities(name);
+CREATE INDEX idx_rel_source ON arcus_relationships(source_entity_id);
+CREATE INDEX idx_rel_target ON arcus_relationships(target_entity_id);
+CREATE INDEX idx_rel_relationship ON arcus_relationships(relationship);
 ```
 
 ### 3. Hook Integration

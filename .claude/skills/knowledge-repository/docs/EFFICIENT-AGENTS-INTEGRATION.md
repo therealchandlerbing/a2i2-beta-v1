@@ -763,11 +763,11 @@ ALTER TABLE arcus_procedural_memory ADD COLUMN IF NOT EXISTS
 
 -- Bidirectional linking (from A-MEM)
 CREATE TYPE link_type AS ENUM ('semantic', 'causal', 'temporal', 'entity_cooccurrence');
-ALTER TABLE arcus_knowledge_graph ADD COLUMN IF NOT EXISTS
+ALTER TABLE arcus_relationships ADD COLUMN IF NOT EXISTS
     link_type link_type DEFAULT 'semantic';
-ALTER TABLE arcus_knowledge_graph ADD COLUMN IF NOT EXISTS
+ALTER TABLE arcus_relationships ADD COLUMN IF NOT EXISTS
     link_strength NUMERIC(3,2) DEFAULT 0.5;
-ALTER TABLE arcus_knowledge_graph ADD COLUMN IF NOT EXISTS
+ALTER TABLE arcus_relationships ADD COLUMN IF NOT EXISTS
     retroactive_updates JSONB DEFAULT '[]';
 
 -- Step-level confidence (from QLASS)

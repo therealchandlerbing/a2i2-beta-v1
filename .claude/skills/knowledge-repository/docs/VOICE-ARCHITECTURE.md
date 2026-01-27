@@ -492,7 +492,7 @@ All platforms share the same memory and context:
 │   │   • arcus_episodic_memory                                    │   │
 │   │   • arcus_semantic_memory                                    │   │
 │   │   • arcus_procedural_memory                                  │   │
-│   │   • arcus_knowledge_graph                                    │   │
+│   │   • arcus_entities + arcus_relationships                     │   │
 │   │                                                               │   │
 │   └─────────────────────────────────────────────────────────────┘   │
 │                                                                       │

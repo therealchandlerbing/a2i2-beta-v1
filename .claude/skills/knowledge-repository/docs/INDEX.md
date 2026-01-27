@@ -163,7 +163,7 @@ A2I2 uses four core memory operations:
 | **Semantic** | `arcus_semantic_memory` | What we know |
 | **Procedural** | `arcus_procedural_memory` | How we work |
 | **Working** | Session memory | Current context |
-| **Relational** | `arcus_knowledge_graph` | How things connect |
+| **Relational** | `arcus_entities` + `arcus_relationships` | How things connect |
 
 ---
 

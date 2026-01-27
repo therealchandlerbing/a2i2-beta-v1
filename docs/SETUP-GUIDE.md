@@ -12,8 +12,11 @@ This guide covers everything needed to bring the A2I2 (Arcus Intelligence) platf
 2. [Phase 1: Database Setup (Supabase or Neon)](#2-phase-1-database-setup)
 3. [Phase 2: Environment Variables](#3-phase-2-environment-variables)
 4. [Phase 3: Session Memory Initialization](#4-phase-3-session-memory-initialization)
+   - [Auto-Capture Hooks Configuration](#step-34-configure-auto-capture-hooks-optional)
 5. [Phase 4: Vercel Deployment (Optional)](#5-phase-4-vercel-deployment)
 6. [Phase 5: Voice Integration (Optional)](#6-phase-5-voice-integration)
+   - [MCP Voice Server Configuration](#mcp-voice-server-configuration)
+   - [Production Voice (PersonaPlex + Gemini Live)](#production-voice-personaplex--gemini-live)
 7. [Verification Checklist](#7-verification-checklist)
 8. [Troubleshooting](#8-troubleshooting)
 9. [Cost Estimates](#9-cost-estimates)
@@ -334,6 +337,53 @@ Test by asking Claude:
 
 If working correctly, Claude should reference your configured preferences.
 
+### Step 3.4: Configure Auto-Capture Hooks (Optional)
+
+A2I2 includes a hooks configuration for automatic knowledge capture. Review and customize:
+
+```bash
+# View the hooks configuration
+cat .claude/skills/knowledge-repository/config/hooks-config.json
+```
+
+**Hook Types:**
+
+| Hook | Trigger | Action |
+|------|---------|--------|
+| `SessionStart` | Claude session begins | Load preferences from CLAUDE.memory.md |
+| `SessionEnd` | Session ends | Sync pending learnings to database |
+| `PostToolUse` | After tool execution | Capture successful patterns |
+| `UserCorrection` | User corrects Claude | Record as preference |
+| `DecisionMade` | Decision is made | Store as episodic event |
+
+**Auto-Capture Triggers:**
+
+The hooks config defines patterns that trigger automatic learning:
+
+```json
+{
+  "user_correction_patterns": [
+    "actually,", "no, i meant", "i prefer", "always use", "never use"
+  ],
+  "decision_patterns": [
+    "we've decided", "let's go with", "the decision is"
+  ],
+  "learning_patterns": [
+    "remember that", "keep in mind", "note that", "for future reference"
+  ]
+}
+```
+
+**Security Rules:**
+
+The hooks automatically exclude sensitive data:
+- Passwords, API keys, tokens, credentials, secrets
+
+To customize hooks behavior, copy and modify:
+```bash
+cp .claude/skills/knowledge-repository/config/hooks-config.json .claude/hooks/hooks-config.json
+```
+
 ---
 
 ## 5. Phase 4: Vercel Deployment (Optional)
@@ -433,7 +483,68 @@ WHISPER_MODEL="base.en"
 ELEVENLABS_API_KEY="your-key"
 ```
 
-See `.claude/skills/knowledge-repository/docs/VOICE-ARCHITECTURE.md` for full voice setup.
+### MCP Voice Server Configuration
+
+To enable voice in Claude Code, merge the MCP voice config into your Claude Code settings:
+
+**Location:** `.claude/skills/knowledge-repository/config/mcp-voice-config.json`
+
+**Cloud Mode (OpenAI):**
+```json
+{
+  "mcpServers": {
+    "voicemode": {
+      "command": "uvx",
+      "args": ["voice-mcp"],
+      "env": {
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+        "VOICE_MODE": "cloud",
+        "VOICE_STT_SERVICE": "openai",
+        "VOICE_TTS_SERVICE": "openai",
+        "VOICE_TTS_VOICE": "nova"
+      }
+    }
+  }
+}
+```
+
+**Local Mode (Free, Offline):**
+```json
+{
+  "mcpServers": {
+    "voicemode-local": {
+      "command": "uvx",
+      "args": ["voice-mcp"],
+      "env": {
+        "VOICE_MODE": "local",
+        "VOICE_STT_SERVICE": "whisper",
+        "VOICE_TTS_SERVICE": "kokoro",
+        "WHISPER_MODEL": "base.en"
+      }
+    }
+  }
+}
+```
+
+**Installation:**
+```bash
+# Install uv package manager
+pip install uv
+
+# Install voice MCP server
+uvx voice-mode-install
+
+# For local mode, also install:
+pip install whisper-cpp-python kokoro-onnx
+```
+
+Merge your chosen config into `~/.config/claude-code/mcp.json` or your project's `.mcp.json`.
+
+### Production Voice (PersonaPlex + Gemini Live)
+
+For production deployments with full-duplex conversation:
+
+See `docs/VOICE-SETUP.md` for the complete PersonaPlex primary + Gemini Live fallback setup.
 
 ---
 
