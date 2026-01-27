@@ -926,15 +926,16 @@ CREATE TABLE arcus_procedural_memory (
   embedding VECTOR(1536)
 );
 
--- Knowledge Graph Edges
-CREATE TABLE arcus_knowledge_graph (
+-- Knowledge Graph Edges (Relationships between entities)
+CREATE TABLE arcus_relationships (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  source_entity_id UUID NOT NULL REFERENCES arcus_entities(id) ON DELETE CASCADE,
   source_type TEXT NOT NULL,
-  source_id TEXT NOT NULL,
   source_name TEXT NOT NULL,
   relationship TEXT NOT NULL,
+  relationship_category TEXT,
+  target_entity_id UUID NOT NULL REFERENCES arcus_entities(id) ON DELETE CASCADE,
   target_type TEXT NOT NULL,
-  target_id TEXT NOT NULL,
   target_name TEXT NOT NULL,
   properties JSONB DEFAULT '{}',
   bidirectional BOOLEAN DEFAULT FALSE,
@@ -1011,9 +1012,9 @@ CREATE INDEX idx_procedural_type ON arcus_procedural_memory(procedure_type);
 CREATE INDEX idx_procedural_name ON arcus_procedural_memory(name);
 CREATE INDEX idx_procedural_last_used ON arcus_procedural_memory(last_used DESC);
 
-CREATE INDEX idx_graph_source ON arcus_knowledge_graph(source_type, source_id);
-CREATE INDEX idx_graph_target ON arcus_knowledge_graph(target_type, target_id);
-CREATE INDEX idx_graph_relationship ON arcus_knowledge_graph(relationship);
+CREATE INDEX idx_rel_source ON arcus_relationships(source_entity_id);
+CREATE INDEX idx_rel_target ON arcus_relationships(target_entity_id);
+CREATE INDEX idx_rel_relationship ON arcus_relationships(relationship);
 
 CREATE INDEX idx_entities_type ON arcus_entities(entity_type);
 CREATE INDEX idx_entities_name ON arcus_entities(name);
@@ -1054,8 +1055,8 @@ CREATE TRIGGER update_procedural_modtime
   BEFORE UPDATE ON arcus_procedural_memory
   FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
-CREATE TRIGGER update_graph_modtime
-  BEFORE UPDATE ON arcus_knowledge_graph
+CREATE TRIGGER update_relationships_modtime
+  BEFORE UPDATE ON arcus_relationships
   FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
 CREATE TRIGGER update_entities_modtime
