@@ -32,65 +32,6 @@
 
 <br/>
 
-## 🆕 What's New in v1.4.0
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-### Phase 4 Complete: Voice & Advanced Autonomy
-
-**Voice Orchestration**
-- Sub-250ms first response targeting
-- Voice-Native Knowledge Graph (VNKG)
-- Progressive voice strategy: Siri MVP → PersonaPlex full
-
-**Digital Twin Modeling**
-- 5 cognitive styles detection
-- 5 communication preferences
-- Decision pattern recognition
-- Proactive suggestion generation
-
-**Multi-Channel Access**
-- Siri Shortcuts integration (MVP)
-- WhatsApp/Discord planned (Tier 1-2)
-- Clawdbot pattern integration
-
-</td>
-<td width="50%" valign="top">
-
-### Key Enhancements
-
-**Implementation Complete**
-- Model router with 7 AI models
-- Trust engine with 5 autonomy levels
-- Semantic search with 9 embedding models
-- Context budgeting with 3 packing strategies
-- Skill orchestration with 7 categories
-- Reward signals for outcome optimization
-
-**New Documentation**
-- VOICE-ARCHITECTURE.md - Progressive voice strategy
-- CLAWDBOT-INTEGRATION.md - Multi-channel patterns
-- EFFICIENT-AGENTS-INTEGRATION.md - 28+ papers synthesized
-- TOOLORCHESTRA-REVIEW.md - Skill orchestration patterns
-
-**Database Schema**
-- 13+ tables covering all memory types
-- Vector embeddings (1536 dimensions)
-- Temporal validity tracking
-- Category-based trust metrics
-
-</td>
-</tr>
-</table>
-
-<br/>
-
----
-
-<br/>
-
 ## 🎯 Real-World Use Cases
 
 <details>
@@ -1848,7 +1789,11 @@ a2i2-beta-v1/
 - [ ] Chief of Staff Protocol v1.0
 - [ ] Enterprise multi-tenant
 - [ ] Discord integration
-- [ ] Custom "Hey Arcus" wake word
+- [ ] **NanoWakeWord Integration** ✨
+  - [ ] Data collection (1000+ samples)
+  - [ ] Train QuartzNet model
+  - [ ] ONNX Runtime mobile
+  - [ ] Web AudioWorklet
 - [ ] React Native mobile app
 - [ ] Parallel skill execution
 - [ ] Sleep-time consolidation
@@ -2592,6 +2537,315 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 <br/>
 
 *"The journey of a thousand light years begins with a single knowledge entry."*
+
+<br/>
+
+---
+
+<br/>
+
+## 📚 Reviewed Projects & External Resources
+
+<details>
+<summary><b>🔍 NanoWakeWord</b> — Adaptive wake word detection framework <code>✅ APPROVED FOR INTEGRATION</code></summary>
+
+<br/>
+
+**Repository:** [github.com/arcosoph/nanowakeword](https://github.com/arcosoph/nanowakeword)
+**License:** Apache 2.0
+**Version:** 2.0.0 (PyPI: 1.3.3)
+**Python:** 3.8 - 3.13
+**Reviewed:** 2026-01-27 (Forensic Level)
+**Integration Plan:** [NANOWAKEWORD-INTEGRATION.md](.claude/skills/knowledge-repository/docs/NANOWAKEWORD-INTEGRATION.md)
+
+### Executive Summary
+
+NanoWakeWord is a **production-ready, open-source** wake word detection framework that will replace Picovoice as A2I2's primary wake word solution. It offers 13 neural architectures, automatic training optimization, and ONNX export for cross-platform deployment.
+
+**Decision: ✅ ADOPT** — Replace Picovoice ($100) with NanoWakeWord (free, full control)
+
+### Technical Specifications
+
+| Specification | Value |
+|:--------------|:------|
+| **Audio input** | 16kHz mono, 1280-sample chunks (80ms) |
+| **Model formats** | ONNX, PyTorch |
+| **Inference latency** | <5ms (QuartzNet), <1ms (DNN) |
+| **False positive rate** | <1 per 8-12 hours (typical) |
+| **Training loss** | ~0.2065 (stable) |
+| **Dependencies** | PyTorch, ONNX, FFmpeg (training) |
+
+### Neural Architecture Comparison
+
+| Architecture | Status | Size | Speed | Use Case |
+|:-------------|:------:|:----:|:-----:|:---------|
+| **QuartzNet** | ✅ Production | ~2MB | <5ms | **Mobile (recommended)** |
+| **DNN** | ✅ Production | <500KB | <1ms | MCU/embedded |
+| **LSTM** | ✅ Production | ~5MB | <10ms | **Noisy environments** |
+| **GRU** | ✅ Production | ~3MB | <7ms | Balanced |
+| **CNN** | ✅ Production | ~1MB | <3ms | Short wake words |
+| **Transformer** | ✅ Production | ~10MB | <5ms | **Server/GPU** |
+| **TCN** | ✅ Production | ~4MB | <5ms | Parallel processing |
+| Conformer | ⚠️ Experimental | ~15MB | <10ms | SOTA (requires tuning) |
+| E-Branchformer | ⚠️ Experimental | ~20MB | <15ms | Research only |
+
+### NanoWakeWord vs Picovoice
+
+| Dimension | NanoWakeWord | Picovoice |
+|:----------|:------------:|:---------:|
+| **Cost** | $0 | $100 |
+| **License** | Apache 2.0 | Commercial |
+| **Training control** | Full | Limited |
+| **Architectures** | 13 | 1 |
+| **Model export** | ONNX + PyTorch | Proprietary .ppn |
+| **Custom data** | Full support | Limited |
+| **VAD included** | Yes | Separate product |
+| **Noise reduction** | Yes | No |
+| **Mobile SDK** | Requires ONNX RT | Native |
+| **Documentation** | Good | Excellent |
+
+### Key Features for A2I2
+
+**Phonetic Adversarial Negative Generation**
+Auto-generates acoustically confusing phrases ("hey marcus", "hey argus") as negative samples — critical for reducing false positives on "Hey Arcus".
+
+**Intelligent Configuration Engine**
+Analyzes your dataset and hardware to auto-generate optimal:
+- Architecture depth and width
+- Learning rate schedules
+- Batch composition
+- Augmentation policies
+
+**Memory-Mapped Training**
+Handles datasets exceeding RAM via disk streaming — enables training on comprehensive negative sample sets.
+
+**Built-in Voice Pipeline**
+- Voice Activity Detection (VAD)
+- Noise reduction
+- Debouncing/patience filters
+- Stateful streaming inference
+
+### Integration Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                A2I2 VOICE PIPELINE (Phase 2)                 │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│   Audio Input (16kHz mono)                                   │
+│         │                                                    │
+│         ▼                                                    │
+│   ┌─────────────────┐                                       │
+│   │  NanoWakeWord   │  "Hey Arcus" detected?                │
+│   │  (QuartzNet)    │  → Confidence > 0.9                   │
+│   │  ONNX Runtime   │  → Cooldown check                     │
+│   └────────┬────────┘                                       │
+│            │ Yes                                             │
+│            ▼                                                 │
+│   ┌─────────────────┐                                       │
+│   │  PersonaPlex    │  Full-duplex voice conversation       │
+│   │  (170ms latency)│  Memory context injected              │
+│   └─────────────────┘                                       │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Roadmap
+
+**Week 1-2: Data Collection & Training**
+- [ ] Collect 1000+ "Hey Arcus" recordings (diverse voices)
+- [ ] Collect negative samples (3x duration)
+- [ ] Gather background noise (office, car, home, outdoor)
+- [ ] Train QuartzNet model (mobile)
+- [ ] Train LSTM model (noisy environments)
+- [ ] Export to ONNX format
+
+**Week 3-4: Mobile Integration**
+- [ ] Add `onnxruntime-react-native` to app
+- [ ] Implement `NanoWakeWordService` module
+- [ ] Integrate with audio capture pipeline
+- [ ] Connect to PersonaPlex on detection
+- [ ] Test on iOS and Android devices
+
+**Week 5: Web Integration**
+- [ ] Add `onnxruntime-web` to Next.js app
+- [ ] Implement AudioWorklet processor
+- [ ] Test across browsers (Chrome, Firefox, Safari)
+
+**Week 6: Testing & Optimization**
+- [ ] Benchmark accuracy (target: 95%+ detection, <1 FP/12hr)
+- [ ] Measure CPU/battery impact (<5% CPU)
+- [ ] Compare against Picovoice baseline (if available)
+- [ ] Deploy to staging
+
+### NanoInterpreter API
+
+```python
+from nanowakeword.interpreter.nanointerpreter import NanoInterpreter
+
+# Load model
+interpreter = NanoInterpreter.load_model("hey_arcus.onnx")
+
+# Process audio chunks (1280 samples = 80ms at 16kHz)
+while True:
+    audio_chunk = get_audio_chunk()  # int16 numpy array
+    score = interpreter.predict(audio_chunk)
+
+    if score > 0.9:  # Threshold
+        print("Hey Arcus detected!")
+        interpreter.reset()
+        start_personaplex_conversation()
+```
+
+### Training Configuration
+
+```yaml
+# hey_arcus_config.yaml
+model_type: quartznet
+model_name: "hey_arcus_prod_v1"
+
+positive_data_path: "./data/positive"
+negative_data_path: "./data/negative"
+background_paths: ["./data/noise/office", "./data/noise/car"]
+rir_paths: ["./data/rir"]
+
+# TTS data augmentation
+target_phrase: ["hey arcus", "hey ar-cus"]
+generate_positive_samples: 500
+custom_negative_phrases: ["hey marcus", "hey argus", "play arcus"]
+generate_negative_samples: 2000
+
+steps: 25000
+checkpointing:
+  enabled: true
+  interval_steps: 500
+  limit: 5
+```
+
+### Concepts Incorporated into A2I2
+
+| Concept | Application |
+|:--------|:------------|
+| **Phonetic adversarial generation** | Training robust wake word models |
+| **Stochastic Weight Averaging** | Improving model generalization |
+| **Memory-mapped training** | Handling large organizational knowledge |
+| **Data-driven configuration** | Adaptive system optimization |
+| **Multi-architecture support** | Device-appropriate model selection |
+
+### Risk Mitigation
+
+| Risk | Mitigation |
+|:-----|:-----------|
+| Mobile SDK gaps | Use ONNX Runtime (mature, cross-platform) |
+| Training complexity | Detailed documentation + automation |
+| Data requirements | TTS augmentation + crowdsourced collection |
+| Accuracy concerns | A/B test against Picovoice baseline |
+
+### Documentation
+
+- **Full Integration Plan:** [NANOWAKEWORD-INTEGRATION.md](.claude/skills/knowledge-repository/docs/NANOWAKEWORD-INTEGRATION.md)
+- **Voice Architecture:** [VOICE-ARCHITECTURE.md](.claude/skills/knowledge-repository/docs/VOICE-ARCHITECTURE.md)
+- **NanoWakeWord Repo:** [github.com/arcosoph/nanowakeword](https://github.com/arcosoph/nanowakeword)
+- **Configuration Guide:** [CONFIGURATION_GUIDE.md](https://github.com/arcosoph/nanowakeword/blob/main/CONFIGURATION_GUIDE.md)
+
+</details>
+
+<br/>
+
+---
+
+<br/>
+
+## 📋 Version History
+
+<details>
+<summary><b>v1.4.0</b> — Phase 4 Complete: Voice & Advanced Autonomy (2026-01-25)</summary>
+
+<br/>
+
+**Voice Orchestration**
+- Sub-250ms first response targeting
+- Voice-Native Knowledge Graph (VNKG)
+- Progressive voice strategy: Siri MVP → PersonaPlex full
+
+**Digital Twin Modeling**
+- 5 cognitive styles detection
+- 5 communication preferences
+- Decision pattern recognition
+- Proactive suggestion generation
+
+**Multi-Channel Access**
+- Siri Shortcuts integration (MVP)
+- WhatsApp/Discord planned (Tier 1-2)
+- Clawdbot pattern integration
+
+**Implementation Complete**
+- Model router with 7 AI models
+- Trust engine with 5 autonomy levels
+- Semantic search with 9 embedding models
+- Context budgeting with 3 packing strategies
+- Skill orchestration with 7 categories
+- Reward signals for outcome optimization
+
+**New Documentation**
+- VOICE-ARCHITECTURE.md - Progressive voice strategy
+- CLAWDBOT-INTEGRATION.md - Multi-channel patterns
+- EFFICIENT-AGENTS-INTEGRATION.md - 28+ papers synthesized
+- TOOLORCHESTRA-REVIEW.md - Skill orchestration patterns
+
+**Database Schema**
+- 13+ tables covering all memory types
+- Vector embeddings (1536 dimensions)
+- Temporal validity tracking
+- Category-based trust metrics
+
+</details>
+
+<details>
+<summary><b>v1.3.0</b> — Phase 3: Intelligence (2026-01-20)</summary>
+
+<br/>
+
+- Reward signals for outcome optimization
+- Synthetic data generation
+- Trust engine implementation
+- Category-based tracking
+
+</details>
+
+<details>
+<summary><b>v1.2.0</b> — Phase 2: Orchestration (2026-01-15)</summary>
+
+<br/>
+
+- Skill orchestration with 7 categories
+- Context budgeting with 3 packing strategies
+- Model routing implementation
+
+</details>
+
+<details>
+<summary><b>v1.1.0</b> — Phase 1: Multi-Channel (2026-01-10)</summary>
+
+<br/>
+
+- Multi-channel strategy design
+- Siri Shortcuts MVP
+- Clawdbot pattern analysis
+
+</details>
+
+<details>
+<summary><b>v1.0.0-beta</b> — Initial Release (2026-01-05)</summary>
+
+<br/>
+
+- Core memory architecture (5 memory types)
+- Gemini multi-model integration
+- PersonaPlex voice foundation
+- Supabase schema with pgvector
+
+</details>
 
 <br/>
 
