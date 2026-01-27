@@ -841,7 +841,7 @@ AXIOM_ORG_ID="your-org"
 LOG_LEVEL="info"
 
 # Alerting
-SLACK_WEBHOOK_URL="https://hooks.slack.com/..."
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
 RESEND_API_KEY="re_..."
 ALERT_EMAIL="ops@yourcompany.com"
 
