@@ -32,65 +32,6 @@
 
 <br/>
 
-## 🆕 What's New in v1.4.0
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-### Phase 4 Complete: Voice & Advanced Autonomy
-
-**Voice Orchestration**
-- Sub-250ms first response targeting
-- Voice-Native Knowledge Graph (VNKG)
-- Progressive voice strategy: Siri MVP → PersonaPlex full
-
-**Digital Twin Modeling**
-- 5 cognitive styles detection
-- 5 communication preferences
-- Decision pattern recognition
-- Proactive suggestion generation
-
-**Multi-Channel Access**
-- Siri Shortcuts integration (MVP)
-- WhatsApp/Discord planned (Tier 1-2)
-- Clawdbot pattern integration
-
-</td>
-<td width="50%" valign="top">
-
-### Key Enhancements
-
-**Implementation Complete**
-- Model router with 7 AI models
-- Trust engine with 5 autonomy levels
-- Semantic search with 9 embedding models
-- Context budgeting with 3 packing strategies
-- Skill orchestration with 7 categories
-- Reward signals for outcome optimization
-
-**New Documentation**
-- VOICE-ARCHITECTURE.md - Progressive voice strategy
-- CLAWDBOT-INTEGRATION.md - Multi-channel patterns
-- EFFICIENT-AGENTS-INTEGRATION.md - 28+ papers synthesized
-- TOOLORCHESTRA-REVIEW.md - Skill orchestration patterns
-
-**Database Schema**
-- 13+ tables covering all memory types
-- Vector embeddings (1536 dimensions)
-- Temporal validity tracking
-- Category-based trust metrics
-
-</td>
-</tr>
-</table>
-
-<br/>
-
----
-
-<br/>
-
 ## 🎯 Real-World Use Cases
 
 <details>
@@ -2592,6 +2533,167 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 <br/>
 
 *"The journey of a thousand light years begins with a single knowledge entry."*
+
+<br/>
+
+---
+
+<br/>
+
+## 📚 Reviewed Projects & External Resources
+
+<details>
+<summary><b>🔍 NanoWakeWord</b> — Adaptive wake word detection framework</summary>
+
+<br/>
+
+**Repository:** [github.com/arcosoph/nanowakeword](https://github.com/arcosoph/nanowakeword)
+**License:** Apache 2.0
+**Reviewed:** 2026-01-27
+
+### Summary
+
+NanoWakeWord is a lightweight, open-source framework for building custom, high-accuracy wake word detection models. It positions itself as an "intelligent engine" that understands user data and optimizes the training process automatically.
+
+### Key Features
+
+| Feature | Description |
+|:--------|:------------|
+| **Intelligent Configuration Engine** | Auto-analyzes datasets and hardware to generate optimized training configs |
+| **12+ Neural Architectures** | DNN, CNN, LSTM, GRU, TCN, QuartzNet, Transformer, Conformer, E-Branchformer |
+| **Phonetic Adversarial Negatives** | Synthesizes acoustically confusing counter-examples for better boundary learning |
+| **Memory-Mapped Streaming** | Handles multi-terabyte datasets without exceeding RAM |
+| **ONNX/PyTorch Export** | Production-ready deployment formats |
+| **Integrated VAD & Filters** | Voice Activity Detection, noise reduction, debouncing |
+
+### Relevance to A2I2
+
+| Potential Use | Assessment | Priority |
+|:--------------|:-----------|:---------|
+| Custom "Hey Arcus" wake word | **High relevance** — Could replace Picovoice dependency ($100) with open-source solution | 🟡 Medium |
+| Edge deployment | **Relevant** — Lightweight models suitable for mobile/embedded | 🟡 Medium |
+| Voice pipeline enhancement | **Moderate** — VAD/noise reduction could complement PersonaPlex | 🟢 Low |
+
+### Concepts Incorporated
+
+- **Data-driven augmentation policies** — Aligns with A2I2's adaptive learning philosophy
+- **Stochastic Weight Averaging (SWA)** — Technique for improved model generalization (applicable to future model training)
+- **Phonetic adversarial generation** — Novel approach for training robust voice models
+
+### Recommendation
+
+**Status:** 📋 Track for future integration
+
+NanoWakeWord is a strong candidate for the Q2 2026 "Custom Wake Word" roadmap item. It could provide a cost-effective, open-source alternative to Picovoice while maintaining high accuracy. Key advantages:
+- No per-use licensing costs
+- Full control over training data
+- 12+ architecture options for different edge devices
+- Production-grade deployment (ONNX)
+
+**Next steps if integrated:**
+1. Evaluate model accuracy vs. Picovoice baseline
+2. Test latency on target mobile devices
+3. Train custom "Hey Arcus" model with framework
+4. Benchmark false positive rates against PersonaPlex VAD
+
+</details>
+
+<br/>
+
+---
+
+<br/>
+
+## 📋 Version History
+
+<details>
+<summary><b>v1.4.0</b> — Phase 4 Complete: Voice & Advanced Autonomy (2026-01-25)</summary>
+
+<br/>
+
+**Voice Orchestration**
+- Sub-250ms first response targeting
+- Voice-Native Knowledge Graph (VNKG)
+- Progressive voice strategy: Siri MVP → PersonaPlex full
+
+**Digital Twin Modeling**
+- 5 cognitive styles detection
+- 5 communication preferences
+- Decision pattern recognition
+- Proactive suggestion generation
+
+**Multi-Channel Access**
+- Siri Shortcuts integration (MVP)
+- WhatsApp/Discord planned (Tier 1-2)
+- Clawdbot pattern integration
+
+**Implementation Complete**
+- Model router with 7 AI models
+- Trust engine with 5 autonomy levels
+- Semantic search with 9 embedding models
+- Context budgeting with 3 packing strategies
+- Skill orchestration with 7 categories
+- Reward signals for outcome optimization
+
+**New Documentation**
+- VOICE-ARCHITECTURE.md - Progressive voice strategy
+- CLAWDBOT-INTEGRATION.md - Multi-channel patterns
+- EFFICIENT-AGENTS-INTEGRATION.md - 28+ papers synthesized
+- TOOLORCHESTRA-REVIEW.md - Skill orchestration patterns
+
+**Database Schema**
+- 13+ tables covering all memory types
+- Vector embeddings (1536 dimensions)
+- Temporal validity tracking
+- Category-based trust metrics
+
+</details>
+
+<details>
+<summary><b>v1.3.0</b> — Phase 3: Intelligence (2026-01-20)</summary>
+
+<br/>
+
+- Reward signals for outcome optimization
+- Synthetic data generation
+- Trust engine implementation
+- Category-based tracking
+
+</details>
+
+<details>
+<summary><b>v1.2.0</b> — Phase 2: Orchestration (2026-01-15)</summary>
+
+<br/>
+
+- Skill orchestration with 7 categories
+- Context budgeting with 3 packing strategies
+- Model routing implementation
+
+</details>
+
+<details>
+<summary><b>v1.1.0</b> — Phase 1: Multi-Channel (2026-01-10)</summary>
+
+<br/>
+
+- Multi-channel strategy design
+- Siri Shortcuts MVP
+- Clawdbot pattern analysis
+
+</details>
+
+<details>
+<summary><b>v1.0.0-beta</b> — Initial Release (2026-01-05)</summary>
+
+<br/>
+
+- Core memory architecture (5 memory types)
+- Gemini multi-model integration
+- PersonaPlex voice foundation
+- Supabase schema with pgvector
+
+</details>
 
 <br/>
 
