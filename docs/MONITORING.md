@@ -57,6 +57,12 @@ Create `/api/health/route.ts`:
 ```typescript
 import { sql } from '@/lib/db';
 
+// Log errors server-side only (never expose to clients)
+function logError(component: string, error: unknown) {
+  console.error(`[Health Check] ${component} error:`, error);
+  // In production, send to your logging service (Axiom, Datadog, etc.)
+}
+
 export async function GET() {
   const checks = {
     status: 'healthy',
@@ -74,10 +80,11 @@ export async function GET() {
       latency_ms: Date.now() - start
     };
   } catch (error) {
+    logError('database', error);
     checks.status = 'unhealthy';
     checks.checks.database = {
-      status: 'unhealthy',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      status: 'unhealthy'
+      // Note: Never expose error.message to clients (security risk)
     };
   }
 
@@ -95,9 +102,9 @@ export async function GET() {
       procedural_count: procedural[0].count
     };
   } catch (error) {
+    logError('memory_tables', error);
     checks.checks.memory_tables = {
-      status: 'degraded',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      status: 'degraded'
     };
   }
 
@@ -105,8 +112,9 @@ export async function GET() {
   try {
     await sql`SELECT '[1,2,3]'::vector`;
     checks.checks.pgvector = { status: 'healthy' };
-  } catch {
-    checks.checks.pgvector = { status: 'unhealthy', error: 'pgvector not enabled' };
+  } catch (error) {
+    logError('pgvector', error);
+    checks.checks.pgvector = { status: 'unhealthy' };
   }
 
   const statusCode = checks.status === 'healthy' ? 200 : 503;
@@ -344,11 +352,10 @@ SELECT * FROM voice_latency_stats;
 SELECT
     DATE_TRUNC('hour', created_at) as hour,
     COUNT(*) as queries,
-    AVG(latency_ms) as avg_total_ms,
-    AVG(stt_latency_ms) as avg_stt_ms,
-    AVG(tts_latency_ms) as avg_tts_ms,
-    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms) as p95_ms,
-    SUM(CASE WHEN latency_ms < 250 THEN 1 ELSE 0 END)::float / COUNT(*) as under_250ms_rate
+    AVG(total_latency_ms) as avg_total_ms,
+    AVG(first_chunk_latency_ms) as avg_first_chunk_ms,
+    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY total_latency_ms) as p95_ms,
+    SUM(CASE WHEN total_latency_ms < 250 THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0) as under_250ms_rate
 FROM arcus_voice_queries
 WHERE created_at > NOW() - INTERVAL '24 hours'
 GROUP BY DATE_TRUNC('hour', created_at)
@@ -361,12 +368,13 @@ ORDER BY hour DESC;
 // Track voice quality indicators
 interface VoiceMetric {
   session_id: string;
-  stt_confidence: number;
-  stt_latency_ms: number;
-  tts_latency_ms: number;
+  user_id: string;
+  query_text: string;
+  speech_confidence: number;
+  first_chunk_latency_ms: number;
   total_latency_ms: number;
-  transcript_length: number;
-  response_length: number;
+  audio_duration_ms?: number;
+  provider_used: string;
   error?: string;
 }
 
@@ -374,14 +382,22 @@ async function recordVoiceMetric(metric: VoiceMetric) {
   await sql`
     INSERT INTO arcus_voice_queries (
       query_text,
-      latency_ms,
-      stt_latency_ms,
-      tts_latency_ms
+      user_id,
+      session_id,
+      speech_confidence,
+      first_chunk_latency_ms,
+      total_latency_ms,
+      audio_duration_ms,
+      provider_used
     ) VALUES (
-      ${metric.transcript_length + ' chars'},
+      ${metric.query_text},
+      ${metric.user_id},
+      ${metric.session_id},
+      ${metric.speech_confidence},
+      ${metric.first_chunk_latency_ms},
       ${metric.total_latency_ms},
-      ${metric.stt_latency_ms},
-      ${metric.tts_latency_ms}
+      ${metric.audio_duration_ms},
+      ${metric.provider_used}
     )
   `;
 }

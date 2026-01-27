@@ -84,10 +84,12 @@ CREATE TABLE IF NOT EXISTS arcus_voice_queries (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id TEXT NOT NULL DEFAULT 'default',
     query_text TEXT NOT NULL,
-    response_text TEXT,
-    latency_ms INTEGER,
-    stt_latency_ms INTEGER,
-    tts_latency_ms INTEGER,
+    session_id TEXT,
+    audio_duration_ms INTEGER,
+    speech_confidence FLOAT DEFAULT 1.0,
+    first_chunk_latency_ms INTEGER,
+    total_latency_ms INTEGER,
+    provider_used TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -236,13 +238,24 @@ CREATE TABLE IF NOT EXISTS arcus_context_budget_logs (
 
 ## Database Migrations
 
+### UUID Generation Note
+
+The A2I2 schema uses `uuid_generate_v4()` from the `uuid-ossp` extension. This extension is enabled automatically in the base schema:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+```
+
+**Alternative for PostgreSQL 13+:** You can also use `gen_random_uuid()` which is built into PostgreSQL core and doesn't require the extension. Both produce cryptographically random UUIDs and are functionally equivalent.
+
 ### Creating a Migration
 
 When making schema changes:
 
 1. Create migration file:
    ```bash
-   touch schemas/migrations/$(date +%Y%m%d)_description.sql
+   # From repo root
+   touch .claude/skills/knowledge-repository/schemas/migrations/$(date +%Y%m%d)_description.sql
    ```
 
 2. Write migration with rollback:
@@ -261,21 +274,23 @@ When making schema changes:
 
 3. Test migration:
    ```bash
-   # Test on dev database first
-   psql "$DEV_DATABASE_URL" < migrations/20260127_add_voice_tables.sql
+   # Test on dev database first (from repo root)
+   psql "$DEV_DATABASE_URL" < .claude/skills/knowledge-repository/schemas/migrations/20260127_add_voice_tables.sql
    ```
 
 ### Running Migrations
 
 ```bash
-# List pending migrations
-ls schemas/migrations/*.sql | sort
+# Migration files are located at: .claude/skills/knowledge-repository/schemas/migrations/
+
+# List pending migrations (from repo root)
+ls .claude/skills/knowledge-repository/schemas/migrations/*.sql | sort
 
 # Run specific migration
-psql "$DATABASE_URL" < schemas/migrations/20260127_add_voice_tables.sql
+psql "$DATABASE_URL" < .claude/skills/knowledge-repository/schemas/migrations/20260127_add_voice_tables.sql
 
 # Run all migrations in order
-for f in schemas/migrations/*.sql; do
+for f in .claude/skills/knowledge-repository/schemas/migrations/*.sql; do
     echo "Running $f..."
     psql "$DATABASE_URL" < "$f"
 done

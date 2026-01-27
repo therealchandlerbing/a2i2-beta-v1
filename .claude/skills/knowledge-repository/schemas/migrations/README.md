@@ -36,9 +36,15 @@ supabase db push --linked
 
 ### Neon
 
-Using psql:
+Using psql (run from repo root):
 ```bash
-psql "$DATABASE_URL_DIRECT" -f schemas/migrations/YYYYMMDD_NNN_description.sql
+psql "$DATABASE_URL_DIRECT" -f .claude/skills/knowledge-repository/schemas/migrations/YYYYMMDD_NNN_description.sql
+```
+
+Or from within the migrations directory:
+```bash
+cd .claude/skills/knowledge-repository/schemas/migrations
+psql "$DATABASE_URL_DIRECT" -f YYYYMMDD_NNN_description.sql
 ```
 
 Or use Neon Dashboard SQL Editor.

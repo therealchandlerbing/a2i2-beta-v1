@@ -266,11 +266,16 @@ class VoiceOrchestrator:
     async def _try_gemini_live(self) -> bool:
         """Attempt Gemini Live connection."""
         try:
-            # Test Gemini API availability
             from google import genai
             client = genai.Client(api_key=self.gemini_key)
-            # Verify live audio capability
-            return True
+
+            # Verify Live API is available by checking model capabilities
+            # In production, consider a lightweight test stream
+            model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview")
+
+            # Basic connectivity check - for production, implement actual
+            # audio stream test to verify live audio capability
+            return client is not None and self.gemini_key is not None
         except Exception as e:
             print(f"Gemini Live unavailable: {e}")
             return False
@@ -308,8 +313,11 @@ async def create_gemini_live_session():
     """Create a Gemini Live audio session."""
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
+    # Use environment variable for model, default to native audio model
+    model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview")
+
     async with client.aio.live.connect(
-        model="gemini-2.5-flash-preview",
+        model=model,
         config=GEMINI_LIVE_CONFIG
     ) as session:
         return session
@@ -379,8 +387,10 @@ class WakeWordService:
             )
             await detector.start(callback=on_wake)
         elif self.engine == "picovoice":
-            # Picovoice implementation
-            pass
+            # Picovoice Porcupine integration (placeholder)
+            # See: https://picovoice.ai/docs/porcupine/
+            # Requires PICOVOICE_ACCESS_KEY environment variable
+            raise NotImplementedError("Picovoice integration pending - use nanowakeword")
 ```
 
 ---

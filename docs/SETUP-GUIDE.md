@@ -72,10 +72,13 @@ pip install websockets           # PersonaPlex connection
 npm install @neondatabase/serverless  # Neon database driver
 npm install zod                        # Input validation
 
-# Optional
-npm install @clerk/nextjs              # Authentication
-npm install ai @anthropic-ai/sdk       # AI SDK
+# Optional (based on your deployment needs)
+npm install @clerk/nextjs              # Authentication (if using Clerk)
+npm install ai @anthropic-ai/sdk       # AI SDK (required if calling Claude from your web app)
+npm install @google/generative-ai      # Gemini SDK (required if calling Gemini from your web app)
 ```
+
+> **Note:** The AI SDKs are optional for the Vercel deployment if you're only using the database and Claude Code CLI directly. They're required if your web application makes direct API calls to Claude or Gemini.
 
 ### API Keys to Obtain
 

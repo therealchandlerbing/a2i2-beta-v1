@@ -27,7 +27,7 @@
 -- Skills & Learning:
 --   - arcus_skills: Available skills
 --   - arcus_skill_executions: Execution history
---   - arcus_digital_twin_profiles: User modeling
+--   - arcus_cognitive_profiles: User modeling (Digital Twin)
 
 -- User Preferences:
 --   - arcus_user_preferences: Key-value preferences
