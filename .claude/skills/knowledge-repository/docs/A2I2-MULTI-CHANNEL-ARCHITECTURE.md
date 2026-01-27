@@ -316,7 +316,7 @@ class ArcusGateway {
   private async handleInbound(msg: InboundMessage): Promise<void> {
     // 1. Access control
     const access = await this.checkAccess(msg);
-    if (access.denied) {
+    if (!access.allowed) {
       return this.handleAccessDenied(msg, access);
     }
 
@@ -607,6 +607,7 @@ class WhatsAppAdapter extends BaseChannelAdapter {
 
   private socket: ReturnType<typeof makeWASocket> | null = null;
   private authState: any;
+  private reconnectAttempts: number = 0;
 
   constructor(config: WhatsAppConfig) {
     super(config);
@@ -632,10 +633,15 @@ class WhatsAppAdapter extends BaseChannelAdapter {
         const shouldReconnect =
           (lastDisconnect?.error as any)?.output?.statusCode !== DisconnectReason.loggedOut;
         if (shouldReconnect) {
-          this.connect();                   // Reconnect
+          // Exponential backoff to avoid tight reconnection loops
+          const backoffMs = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+          this.reconnectAttempts++;
+          console.log(`Reconnecting in ${backoffMs}ms (attempt ${this.reconnectAttempts})`);
+          setTimeout(() => this.connect(), backoffMs);
         }
       } else if (connection === "open") {
         this.connected = true;
+        this.reconnectAttempts = 0;         // Reset backoff on successful connection
         console.log("WhatsApp connected");
       }
     });
@@ -1332,8 +1338,14 @@ class SiriWebhookAdapter extends BaseChannelAdapter {
         await this.messageHandler(message);
       }
 
-      // Wait for response (simplified - real impl would use async response queue)
-      // For now, we'll process synchronously
+      // ARCHITECTURE NOTE: Production Async Response Pattern
+      // Siri Shortcuts have ~30s timeout. For AI responses that may take longer:
+      // 1. Return immediate acknowledgment with request ID
+      // 2. Process async, store response in database keyed by request ID
+      // 3. Use push notification (APNs) to alert user when ready
+      // 4. User taps notification → Shortcut fetches response by ID
+      //
+      // For MVP (sub-30s responses), synchronous is acceptable:
       const response = await this.processAndWaitForResponse(message);
 
       // Format for Siri
@@ -1353,18 +1365,26 @@ class SiriWebhookAdapter extends BaseChannelAdapter {
   private authenticateRequest(req: Request, deviceId?: string): { success: boolean; error?: string } {
     const config = this.config.auth;
 
-    // Token auth
+    // Token auth - SECURITY: Only accept tokens from headers, never query params
+    // Query param tokens are logged in server access logs and can leak
     if (config.mode === "token" || config.mode === "both") {
-      const token = req.headers.authorization?.replace("Bearer ", "") ||
-                    req.headers["x-arcus-token"] ||
-                    req.query.token;
+      const authHeader = req.headers.authorization;
+      const token = authHeader?.startsWith("Bearer ")
+        ? authHeader.slice("Bearer ".length)
+        : (req.headers["x-arcus-token"] as string | undefined);
 
-      if (config.tokens && !config.tokens.includes(token as string)) {
-        return { success: false, error: "Invalid token" };
+      // Ensure tokens are configured
+      if (!config.tokens || config.tokens.length === 0) {
+        return { success: false, error: "Token authentication not configured" };
+      }
+
+      if (!token || !config.tokens.includes(token)) {
+        return { success: false, error: "Invalid or missing token" };
       }
     }
 
-    // Device auth
+    // Device auth - NOTE: deviceId is a non-secret identifier used as additional
+    // filter, not primary authentication. Always require token auth alongside.
     if (config.mode === "device" || config.mode === "both") {
       if (config.allowedDevices && !config.allowedDevices.includes(deviceId || "")) {
         return { success: false, error: "Device not authorized" };
@@ -1559,8 +1579,13 @@ interface AccessControlConfig {
 
 ```typescript
 // Pairing request management
+// NOTE: Production implementation should persist pending requests to database
+// (e.g., Supabase arcus_pairing_requests table) to survive restarts.
+// The in-memory Map shown here is for illustration only.
 class PairingManager {
   private pendingRequests: Map<string, PairingRequest> = new Map();
+  // TODO: Inject database client for persistent storage
+  // private db: SupabaseClient;
 
   async createPairingRequest(
     userId: string,
@@ -1607,10 +1632,13 @@ class PairingManager {
   }
 
   private generateCode(): string {
+    // Use cryptographically secure random for pairing codes
+    const crypto = require("crypto");
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No ambiguous chars
+    const randomBytes = crypto.randomBytes(6);
     let code = "";
     for (let i = 0; i < 6; i++) {
-      code += chars[Math.floor(Math.random() * chars.length)];
+      code += chars[randomBytes[i] % chars.length];
     }
     return code;
   }
