@@ -2,345 +2,332 @@
 
 Complete guide for setting up voice capabilities in the A2I2 platform.
 
+**Primary Voice System**: NVIDIA PersonaPlex (full-duplex, 170ms latency)
+**Fallback**: Google Gemini 2.5 Live API (real-time audio with WebSocket)
+
 ---
 
 ## Table of Contents
 
 1. [Voice Architecture Overview](#voice-architecture-overview)
-2. [Quick Setup Decision Tree](#quick-setup-decision-tree)
-3. [Option A: Cloud Voice (OpenAI)](#option-a-cloud-voice-openai)
-4. [Option B: Local Voice (Whisper + Kokoro)](#option-b-local-voice-whisper--kokoro)
-5. [Option C: Premium Voice (ElevenLabs)](#option-c-premium-voice-elevenlabs)
-6. [Option D: Wake Word Detection](#option-d-wake-word-detection)
-7. [MCP Server Configuration](#mcp-server-configuration)
-8. [Testing Voice Integration](#testing-voice-integration)
-9. [Performance Tuning](#performance-tuning)
-10. [Troubleshooting](#troubleshooting)
+2. [Phase 1: PersonaPlex Setup (Primary)](#phase-1-personaplex-setup-primary)
+3. [Phase 2: Gemini Live API Fallback](#phase-2-gemini-live-api-fallback)
+4. [Phase 3: Wake Word Detection](#phase-3-wake-word-detection)
+5. [Integration with Knowledge Repository](#integration-with-knowledge-repository)
+6. [Alternative Options (Development/Testing)](#alternative-options-developmenttesting)
+7. [Deployment Architecture](#deployment-architecture)
+8. [Performance Tuning](#performance-tuning)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Voice Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    A2I2 Voice Pipeline                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  [Microphone] → [Wake Word] → [STT] → [Claude] → [TTS] → [Speaker]
-│                      │           │         │         │          │
-│                      ▼           ▼         ▼         ▼          │
-│               NanoWakeWord   Whisper   Knowledge   OpenAI       │
-│               or Picovoice   or OpenAI  + Memory   or Kokoro    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-
-Target Latencies:
-- Wake word detection: <50ms
-- Speech-to-text: <500ms
-- LLM processing: <1000ms
-- Text-to-speech: <200ms
-- Total end-to-end: <2000ms (target: <1500ms)
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    A2I2 VOICE ARCHITECTURE                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   User: "Hey Arcus"                                                      │
+│         │                                                                │
+│         ▼                                                                │
+│   ┌─────────────┐                                                        │
+│   │ NanoWakeWord│  On-device wake word detection (<50ms)                │
+│   │ (Primary)   │  Apache 2.0 license, customizable                     │
+│   └──────┬──────┘                                                        │
+│          │                                                               │
+│          ▼                                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                     PERSONAPLEX (Primary)                         │   │
+│   │                                                                   │   │
+│   │   • Full-duplex: listens while speaking                          │   │
+│   │   • 170ms turn-taking latency                                    │   │
+│   │   • 240ms interruption response                                  │   │
+│   │   • Natural backchannels ("uh-huh", "I see", "yeah")            │   │
+│   │   • 16 customizable voice presets                                │   │
+│   │   • 200 token text prompt for persona                            │   │
+│   │                                                                   │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│          │                                                               │
+│          │ If PersonaPlex unavailable:                                  │
+│          ▼                                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                 GEMINI 2.5 LIVE API (Fallback)                    │   │
+│   │                                                                   │   │
+│   │   • Real-time audio via WebSocket                                │   │
+│   │   • Native function calling                                      │   │
+│   │   • Search grounding for current info                            │   │
+│   │   • ~200-300ms latency                                           │   │
+│   │                                                                   │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│          │                                                               │
+│          ▼                                                               │
+│   ┌─────────────────────────────────────────────────────────────────┐   │
+│   │                    ARCUS GATEWAY                                  │   │
+│   │                                                                   │   │
+│   │   • Memory context injection (up to 200 tokens for voice)        │   │
+│   │   • Episodic memory capture                                      │   │
+│   │   • Trust ledger updates                                         │   │
+│   │   • VNKG optimization for speech                                 │   │
+│   │                                                                   │   │
+│   └─────────────────────────────────────────────────────────────────┘   │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Component Options
+### Why PersonaPlex is Primary
 
-| Component | Cloud Option | Local Option | Premium Option |
-|-----------|--------------|--------------|----------------|
-| **Wake Word** | - | NanoWakeWord | Picovoice |
-| **STT** | OpenAI Whisper API | whisper.cpp | Deepgram |
-| **TTS** | OpenAI TTS | Kokoro ONNX | ElevenLabs |
-| **Full-duplex** | Gemini Live API | - | NVIDIA PersonaPlex |
+| Feature | PersonaPlex | Traditional ASR→LLM→TTS |
+|---------|-------------|-------------------------|
+| **Full-duplex** | Yes (native) | No (turn-based) |
+| **Interruptions** | 240ms response | Not supported |
+| **Backchannels** | Natural ("uh-huh", "yeah") | None |
+| **Latency** | 170ms | 1-2 seconds |
+| **Custom voice** | 16 presets | Depends on TTS |
+| **Custom persona** | 200 token prompt | Unlimited |
+| **Self-hosted** | Yes (GPU required) | Yes |
+| **Open source** | Yes (MIT + NVIDIA license) | Varies |
 
 ---
 
-## Quick Setup Decision Tree
-
-```
-Do you need voice features?
-├── No → Skip this guide
-└── Yes → What's your priority?
-    ├── Simplicity → Option A: Cloud (OpenAI)
-    ├── Cost/Privacy → Option B: Local (Whisper + Kokoro)
-    ├── Voice Quality → Option C: Premium (ElevenLabs)
-    └── Wake Word → Option D: Add wake word to any option
-```
-
-**Recommended for most users**: Option A (Cloud) for fastest setup.
-
----
-
-## Option A: Cloud Voice (OpenAI)
-
-**Best for**: Quick setup, reliable quality, moderate cost
+## Phase 1: PersonaPlex Setup (Primary)
 
 ### Prerequisites
-- OpenAI API key with access to Whisper and TTS APIs
-- Internet connection required
 
-### Setup Steps
+- **GPU**: 16GB+ VRAM (NVIDIA A10, A100, or RTX 4090)
+- **HuggingFace Token**: For model weights access
+- **Cloud GPU** (recommended): AWS g5.xlarge, Lambda Labs A10, or RunPod
 
-#### Step 1: Get OpenAI API Key
-1. Go to [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-2. Create new API key
-3. Copy the key (starts with `sk-proj-`)
+### Step 1: Accept License and Get Token
 
-#### Step 2: Configure Environment
+1. Go to [huggingface.co/nvidia/personaplex-7b-v1](https://huggingface.co/nvidia/personaplex-7b-v1)
+2. Accept the NVIDIA Open Model License
+3. Get your HuggingFace token from [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
 
-Add to `.env.local`:
-```bash
-# OpenAI Voice Configuration
-OPENAI_API_KEY="sk-proj-your-key-here"
-
-# Voice Settings
-VOICE_MODE="cloud"
-VOICE_STT_SERVICE="openai"
-VOICE_TTS_SERVICE="openai"
-VOICE_TTS_VOICE="nova"
-```
-
-**Available TTS voices:**
-| Voice | Description | Best For |
-|-------|-------------|----------|
-| `alloy` | Neutral, balanced | General use |
-| `echo` | Warm, conversational | Friendly interactions |
-| `fable` | Expressive, British | Storytelling |
-| `onyx` | Deep, authoritative | Professional |
-| `nova` | Friendly, upbeat | Default recommended |
-| `shimmer` | Clear, gentle | Calm interactions |
-
-#### Step 3: Install MCP Voice Server
+### Step 2: Install System Dependencies
 
 ```bash
-# Install the voicemode MCP server
-pip install voicemode
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install -y libopus-dev python3-dev
 
-# Or with uv (faster)
-uv pip install voicemode
+# macOS
+brew install opus
 ```
 
-#### Step 4: Configure MCP
+### Step 3: Clone and Install PersonaPlex
 
-The configuration is in `.claude/skills/knowledge-repository/config/mcp-voice-config.json`:
+```bash
+# Clone the repository
+git clone https://github.com/NVIDIA/personaplex
+cd personaplex
 
-```json
-{
-  "mcpServers": {
-    "voicemode": {
-      "command": "uvx",
-      "args": ["voicemode"],
-      "env": {
-        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
-      }
-    }
-  }
+# Set HuggingFace token
+export HF_TOKEN="your-huggingface-token"
+
+# Install dependencies
+pip install moshi/.
+
+# For memory-constrained GPUs (enables CPU offload)
+pip install accelerate
+```
+
+### Step 4: Start the Server
+
+```bash
+# Create SSL directory (required for WebSocket)
+SSL_DIR=$(mktemp -d)
+
+# Start PersonaPlex server
+python -m moshi.server --ssl "$SSL_DIR"
+
+# For GPUs with <24GB VRAM, use CPU offload
+python -m moshi.server --ssl "$SSL_DIR" --cpu-offload
+```
+
+Server runs at: `https://localhost:8998`
+
+### Step 5: Configure Arcus Voice Persona
+
+Create the Arcus persona configuration:
+
+```python
+# arcus_persona_config.py
+ARCUS_PERSONA = {
+    "voice_embedding": "NATF2",  # Professional female voice (or NATM1 for male)
+    "text_prompt": """You are Arcus, the AI companion for Arcus Innovation Studios.
+
+Your core traits:
+- Loyal and committed to the team's success
+- Proactive in offering relevant information
+- Concise but thorough - respect people's time
+- Remember past conversations and learn preferences
+- Honest, even when the truth is uncomfortable
+
+Communication style:
+- Warm but professional
+- Use natural backchannels ("got it", "I see", "absolutely")
+- Don't over-explain unless asked
+- Keep responses under 30 words for voice""",
+    "temperature": 0.7
 }
 ```
 
-### Cost Estimate (OpenAI)
+**Available Voice Presets:**
 
-| Service | Rate | 10 min/day | 1 hr/day |
-|---------|------|------------|----------|
-| Whisper STT | $0.006/min | $1.80/mo | $10.80/mo |
-| TTS | $0.015/1K chars | ~$4.50/mo | ~$27/mo |
-| **Total** | | **~$6.30/mo** | **~$38/mo** |
+| Voice | Gender | Best For |
+|-------|--------|----------|
+| NATF0-NATF3 | Female | Professional, conversational |
+| NATM0-NATM3 | Male | Professional, advisory |
+| VARF0-VARF4 | Female | Expressive, customer service |
+| VARM0-VARM4 | Male | Expressive, entertainment |
 
----
+**Recommended for Arcus**: `NATF2` or `NATM1`
 
-## Option B: Local Voice (Whisper + Kokoro)
-
-**Best for**: Privacy-conscious, offline use, zero ongoing cost
-
-### Prerequisites
-- Python 3.10+
-- ~2GB disk space for models
-- CPU with AVX2 support (or GPU for faster inference)
-
-### Setup Steps
-
-#### Step 1: Install Whisper.cpp
-
-```bash
-# Clone whisper.cpp
-git clone https://github.com/ggerganov/whisper.cpp.git
-cd whisper.cpp
-
-# Build
-make
-
-# Download model (base.en is good balance of speed/quality)
-bash ./models/download-ggml-model.sh base.en
-
-# Test
-./main -m models/ggml-base.en.bin -f samples/jfk.wav
-```
-
-**Model Options:**
-| Model | Size | Speed | Quality |
-|-------|------|-------|---------|
-| `tiny.en` | 75MB | Fastest | Good |
-| `base.en` | 142MB | Fast | Better |
-| `small.en` | 466MB | Medium | Great |
-| `medium.en` | 1.5GB | Slow | Excellent |
-
-#### Step 2: Install Kokoro TTS
-
-```bash
-# Install kokoro-onnx
-pip install kokoro-onnx
-
-# Or build from source for better performance
-git clone https://github.com/thewh1teagle/kokoro-onnx.git
-cd kokoro-onnx
-pip install -e .
-```
-
-#### Step 3: Install Python Bindings
-
-```bash
-pip install whisper-cpp-python kokoro-onnx pyaudio
-```
-
-#### Step 4: Configure Environment
+### Step 6: Environment Variables
 
 Add to `.env.local`:
+
 ```bash
-# Local Voice Configuration
-VOICE_MODE="local"
-VOICE_STT_SERVICE="whisper"
-VOICE_TTS_SERVICE="kokoro"
-WHISPER_MODEL="base.en"
-WHISPER_MODEL_PATH="/path/to/whisper.cpp/models/ggml-base.en.bin"
+# PersonaPlex Configuration
+HF_TOKEN="your-huggingface-token"
+PERSONAPLEX_URL="wss://localhost:8998"
+PERSONAPLEX_VOICE="NATF2"
+
+# Or for cloud deployment
+PERSONAPLEX_URL="wss://personaplex.your-server.com:8998"
 ```
-
-#### Step 5: Configure MCP
-
-```json
-{
-  "mcpServers": {
-    "voicemode-local": {
-      "command": "python",
-      "args": ["-m", "voicemode_local"],
-      "env": {
-        "WHISPER_MODEL_PATH": "${WHISPER_MODEL_PATH}",
-        "VOICE_MODE": "local"
-      }
-    }
-  }
-}
-```
-
-### Performance Tips (Local)
-
-1. **Use GPU acceleration** (if available):
-   ```bash
-   # For CUDA
-   pip install whisper-cpp-python[cuda]
-
-   # For Metal (Mac)
-   CMAKE_ARGS="-DWHISPER_COREML=1" pip install whisper-cpp-python
-   ```
-
-2. **Optimize model loading**:
-   - Keep model in memory between requests
-   - Use memory-mapped files for large models
-
-3. **Reduce latency**:
-   - Use `tiny.en` model for fastest response
-   - Enable VAD (Voice Activity Detection) to reduce processing
 
 ---
 
-## Option C: Premium Voice (ElevenLabs)
+## Phase 2: Gemini Live API Fallback
 
-**Best for**: Highest quality voice synthesis, custom voices
+Gemini 2.5 Live API serves as fallback when PersonaPlex is unavailable.
 
-### Prerequisites
-- ElevenLabs account and API key
-- OpenAI API key (for STT, or use Deepgram)
+### Step 1: Get Gemini API Key
 
-### Setup Steps
+1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+2. Create or copy your API key
 
-#### Step 1: Get ElevenLabs API Key
-1. Go to [elevenlabs.io](https://elevenlabs.io)
-2. Sign up and go to Profile → API Key
-3. Copy your API key
-
-#### Step 2: Configure Environment
+### Step 2: Configure Gemini Live
 
 Add to `.env.local`:
-```bash
-# ElevenLabs Configuration
-ELEVENLABS_API_KEY="your-key-here"
-
-# Combined setup: OpenAI STT + ElevenLabs TTS
-OPENAI_API_KEY="sk-proj-..."
-VOICE_MODE="cloud"
-VOICE_STT_SERVICE="openai"
-VOICE_TTS_SERVICE="elevenlabs"
-
-# ElevenLabs voice ID (optional, defaults to Rachel)
-ELEVENLABS_VOICE_ID="21m00Tcm4TlvDq8ikWAM"
-```
-
-**Popular ElevenLabs Voices:**
-| Voice | ID | Description |
-|-------|-----|-------------|
-| Rachel | `21m00Tcm4TlvDq8ikWAM` | Calm, professional |
-| Domi | `AZnzlk1XvdvUeBnXmlld` | Strong, confident |
-| Bella | `EXAVITQu4vr4xnSDxMaL` | Soft, friendly |
-| Antoni | `ErXwobaYiN019PkySvjV` | Well-rounded male |
-| Josh | `TxGEqnHWrfWFTfGW9XjX` | Deep, narrative |
-
-#### Step 3: Install MCP Server
 
 ```bash
-# Install ElevenLabs MCP
-npm install -g @anthropic/mcp-elevenlabs
-
-# Or use npx
-npx @anthropic/mcp-elevenlabs
+# Gemini Live API (Fallback)
+GEMINI_API_KEY="AIzaSy..."
+GEMINI_LIVE_MODEL="gemini-2.5-flash-preview"
 ```
 
-#### Step 4: Configure MCP
+### Step 3: Implement Fallback Logic
 
-```json
-{
-  "mcpServers": {
-    "elevenlabs": {
-      "command": "npx",
-      "args": ["@anthropic/mcp-elevenlabs"],
-      "env": {
-        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}"
-      }
-    }
-  }
-}
+```python
+# voice_orchestrator.py
+"""
+Voice orchestrator with PersonaPlex primary, Gemini Live fallback.
+"""
+import asyncio
+from typing import Optional
+
+class VoiceOrchestrator:
+    def __init__(self):
+        self.personaplex_url = os.getenv("PERSONAPLEX_URL")
+        self.gemini_key = os.getenv("GEMINI_API_KEY")
+        self.active_backend = None
+
+    async def connect(self) -> str:
+        """Connect to voice backend, with fallback."""
+        # Try PersonaPlex first
+        if await self._try_personaplex():
+            self.active_backend = "personaplex"
+            return "personaplex"
+
+        # Fallback to Gemini Live
+        if await self._try_gemini_live():
+            self.active_backend = "gemini_live"
+            return "gemini_live"
+
+        raise ConnectionError("No voice backend available")
+
+    async def _try_personaplex(self) -> bool:
+        """Attempt PersonaPlex connection."""
+        try:
+            # WebSocket connection with 5s timeout
+            ws = await asyncio.wait_for(
+                websockets.connect(self.personaplex_url),
+                timeout=5.0
+            )
+            await ws.close()
+            return True
+        except Exception as e:
+            print(f"PersonaPlex unavailable: {e}")
+            return False
+
+    async def _try_gemini_live(self) -> bool:
+        """Attempt Gemini Live connection."""
+        try:
+            # Test Gemini API availability
+            from google import genai
+            client = genai.Client(api_key=self.gemini_key)
+            # Verify live audio capability
+            return True
+        except Exception as e:
+            print(f"Gemini Live unavailable: {e}")
+            return False
+
+    async def stream_audio(self, audio_chunk: bytes):
+        """Stream audio to active backend."""
+        if self.active_backend == "personaplex":
+            await self._stream_to_personaplex(audio_chunk)
+        elif self.active_backend == "gemini_live":
+            await self._stream_to_gemini(audio_chunk)
 ```
 
-### Cost Estimate (ElevenLabs)
+### Gemini Live Configuration
 
-| Plan | Characters/mo | Cost | Best For |
-|------|---------------|------|----------|
-| Free | 10,000 | $0 | Testing |
-| Starter | 30,000 | $5/mo | Light use |
-| Creator | 100,000 | $22/mo | Regular use |
-| Pro | 500,000 | $99/mo | Heavy use |
+```python
+# gemini_live_config.py
+"""Gemini Live API configuration for voice fallback."""
+from google import genai
+from google.genai import types
+
+GEMINI_LIVE_CONFIG = types.LiveConnectConfig(
+    response_modalities=["AUDIO"],
+    speech_config=types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                voice_name="Aoede"  # Or: Charon, Fenrir, Kore, Puck
+            )
+        )
+    ),
+    system_instruction="""You are Arcus, AI companion for Arcus Innovation Studios.
+Keep responses under 30 words. Be concise, warm, and professional."""
+)
+
+async def create_gemini_live_session():
+    """Create a Gemini Live audio session."""
+    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+    async with client.aio.live.connect(
+        model="gemini-2.5-flash-preview",
+        config=GEMINI_LIVE_CONFIG
+    ) as session:
+        return session
+```
 
 ---
 
-## Option D: Wake Word Detection
+## Phase 3: Wake Word Detection
 
-Enable hands-free activation with "Hey Arcus" or custom wake words.
+### Primary: NanoWakeWord (Open Source)
 
-### Option D1: NanoWakeWord (Recommended - Open Source)
-
-**Best for**: Free, customizable, Apache 2.0 license
+**Recommended** - Apache 2.0 license, customizable, no ongoing costs.
 
 ```bash
-# Install
+# Install NanoWakeWord
 pip install nanowakeword>=2.0.0
 
-# Download pre-trained model
+# Download pre-trained model (or train custom)
 python -c "import nanowakeword; nanowakeword.download_model('hey_arcus')"
 ```
 
@@ -353,238 +340,346 @@ WAKE_WORD_SENSITIVITY="0.5"
 
 See `.claude/skills/knowledge-repository/docs/NANOWAKEWORD-INTEGRATION.md` for full details.
 
-### Option D2: Picovoice Porcupine (Commercial)
+### Alternative: Picovoice Porcupine (Commercial)
 
-**Best for**: Production reliability, custom wake words
+For production reliability with custom wake word training.
 
 ```bash
-# Install
+# Install Picovoice
 pip install pvporcupine
 
 # Get access key from https://console.picovoice.co/
 ```
 
-Configure in `.env.local`:
+Configure:
 ```bash
 PICOVOICE_ACCESS_KEY="your-access-key"
 WAKE_WORD_ENGINE="picovoice"
-WAKE_WORD_KEYWORD="hey arcus"  # Or custom trained
+WAKE_WORD_KEYWORD="hey_arcus"  # Custom trained ($100 one-time)
 ```
 
-**Note**: Custom wake word training costs ~$100 one-time.
-
----
-
-## MCP Server Configuration
-
-The complete MCP configuration file is at `.claude/skills/knowledge-repository/config/mcp-voice-config.json`:
-
-```json
-{
-  "mcpServers": {
-    "voicemode": {
-      "command": "uvx",
-      "args": ["voicemode"],
-      "env": {
-        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
-      },
-      "description": "Cloud-based voice (OpenAI Whisper + TTS)"
-    },
-    "voicemode-local": {
-      "command": "python",
-      "args": ["-m", "voicemode_local"],
-      "env": {
-        "WHISPER_MODEL_PATH": "${WHISPER_MODEL_PATH}",
-        "KOKORO_MODEL_PATH": "${KOKORO_MODEL_PATH}"
-      },
-      "description": "Local voice (Whisper.cpp + Kokoro)"
-    },
-    "elevenlabs": {
-      "command": "npx",
-      "args": ["@anthropic/mcp-elevenlabs"],
-      "env": {
-        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}"
-      },
-      "description": "Premium TTS (ElevenLabs)"
-    }
-  },
-  "defaultServer": "voicemode",
-  "settings": {
-    "sampleRate": 16000,
-    "channels": 1,
-    "chunkSize": 1024,
-    "silenceThreshold": 0.01,
-    "silenceDuration": 1.5
-  }
-}
-```
-
----
-
-## Testing Voice Integration
-
-### Basic Tests
-
-```bash
-# Test STT (Speech-to-Text)
-curl -X POST https://api.openai.com/v1/audio/transcriptions \
-  -H "Authorization: Bearer $OPENAI_API_KEY" \
-  -F file=@test_audio.wav \
-  -F model=whisper-1
-
-# Test TTS (Text-to-Speech)
-curl -X POST https://api.openai.com/v1/audio/speech \
-  -H "Authorization: Bearer $OPENAI_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "tts-1", "input": "Hello, I am Arcus.", "voice": "nova"}' \
-  --output test_output.mp3
-```
-
-### Integration Test
+### Wake Word Integration
 
 ```python
-# test_voice.py
-import asyncio
-from voicemode import VoiceSession
+# wakeword_service.py
+"""Wake word detection service."""
+import nanowakeword
 
-async def test_voice():
-    session = VoiceSession()
+class WakeWordService:
+    def __init__(self):
+        self.engine = os.getenv("WAKE_WORD_ENGINE", "nanowakeword")
+        self.sensitivity = float(os.getenv("WAKE_WORD_SENSITIVITY", "0.5"))
 
-    # Test STT
-    text = await session.transcribe("test_audio.wav")
-    print(f"Transcribed: {text}")
-
-    # Test TTS
-    audio = await session.synthesize("Hello from Arcus!")
-    print(f"Generated {len(audio)} bytes of audio")
-
-asyncio.run(test_voice())
+    async def start_listening(self, on_wake: callable):
+        """Start listening for wake word."""
+        if self.engine == "nanowakeword":
+            detector = nanowakeword.WakeWordDetector(
+                model=os.getenv("WAKE_WORD_MODEL", "hey_arcus"),
+                sensitivity=self.sensitivity
+            )
+            await detector.start(callback=on_wake)
+        elif self.engine == "picovoice":
+            # Picovoice implementation
+            pass
 ```
 
-### Latency Benchmark
+---
+
+## Integration with Knowledge Repository
+
+### Context Injection for Voice
+
+PersonaPlex accepts up to 200 tokens of text prompt. Inject relevant context:
 
 ```python
-# benchmark_voice.py
-import time
-import statistics
+# arcus_personaplex_bridge.py
+"""Bridge between Arcus Knowledge Repository and PersonaPlex."""
+from knowledge_operations import KnowledgeRepository
 
-def benchmark_stt(audio_file, iterations=10):
-    times = []
-    for _ in range(iterations):
-        start = time.perf_counter()
-        # Run STT
-        transcribe(audio_file)
-        times.append((time.perf_counter() - start) * 1000)
+class ArcusPersonaPlexBridge:
+    """Injects Arcus context into PersonaPlex prompts."""
 
-    print(f"STT Latency: {statistics.mean(times):.0f}ms avg, {statistics.stdev(times):.0f}ms std")
+    def __init__(self):
+        self.repo = KnowledgeRepository()
+        self.base_persona = """You are Arcus, AI companion for Arcus Innovation Studios.
+Loyal, proactive, concise. Remember past conversations."""
 
-def benchmark_tts(text, iterations=10):
-    times = []
-    for _ in range(iterations):
-        start = time.perf_counter()
-        # Run TTS
-        synthesize(text)
-        times.append((time.perf_counter() - start) * 1000)
+    def build_context_prompt(self, conversation_topic: str = None) -> str:
+        """
+        Build context-aware prompt for PersonaPlex.
+        Must stay under 200 tokens (~800 characters).
+        """
+        prompt_parts = [self.base_persona]
 
-    print(f"TTS Latency: {statistics.mean(times):.0f}ms avg, {statistics.stdev(times):.0f}ms std")
+        # Get relevant context if topic provided
+        if conversation_topic:
+            relevant = self.repo.recall(
+                query=conversation_topic,
+                memory_types=["semantic", "episodic"],
+                limit=3
+            )
+
+            if relevant.get("semantic"):
+                facts = [m["summary"] for m in relevant["semantic"][:2]]
+                prompt_parts.append(f"Context: {'; '.join(facts)}")
+
+        # Get user preferences
+        prefs = self.repo.recall(
+            query="user preferences communication style",
+            memory_types=["procedural"],
+            limit=1
+        )
+        if prefs.get("procedural"):
+            style = prefs["procedural"][0].get("summary", "")
+            if style:
+                prompt_parts.append(f"Style: {style}")
+
+        return " ".join(prompt_parts)[:800]  # ~200 tokens
+```
+
+### Memory Capture from Voice
+
+```python
+# arcus_personaplex_memory.py
+"""Captures PersonaPlex conversations to knowledge repository."""
+from datetime import datetime
+from knowledge_operations import KnowledgeRepository
+
+class PersonaPlexMemoryCapture:
+    """Captures voice conversations to Arcus knowledge repo."""
+
+    def __init__(self):
+        self.repo = KnowledgeRepository()
+        self.current_session = []
+
+    def on_turn_complete(self, user_text: str, ai_text: str):
+        """Called after each conversational turn."""
+        turn = {
+            "timestamp": datetime.now().isoformat(),
+            "user": user_text,
+            "assistant": ai_text
+        }
+        self.current_session.append(turn)
+
+        # Store episodic memory
+        self.repo.learn("episodic", {
+            "type": "voice_conversation",
+            "user_input": user_text,
+            "assistant_response": ai_text,
+            "modality": "voice_full_duplex",
+            "timestamp": turn["timestamp"],
+            "context": {
+                "session_type": "personaplex",
+                "backend": "personaplex"  # or "gemini_live"
+            }
+        })
+
+    def on_session_end(self):
+        """Called when conversation session ends."""
+        if not self.current_session:
+            return
+
+        # Create session summary
+        self.repo.learn("semantic", {
+            "type": "conversation_summary",
+            "session_turns": len(self.current_session),
+            "modality": "voice_full_duplex",
+            "summary": f"Voice session with {len(self.current_session)} turns"
+        })
+
+        self.current_session = []
 ```
 
 ---
 
-## Performance Tuning
+## Alternative Options (Development/Testing)
 
-### Latency Optimization
+For development or when GPU is unavailable:
 
-| Technique | Impact | Implementation |
-|-----------|--------|----------------|
-| **Streaming STT** | -200ms | Use real-time transcription API |
-| **Streaming TTS** | -300ms | Stream audio as it generates |
-| **Model preloading** | -500ms | Keep models in memory |
-| **Edge deployment** | -100ms | Deploy closer to users |
-| **VAD** | -500ms | Only process speech segments |
-
-### Quality vs Speed Tradeoffs
-
-| Setting | Faster | Better Quality |
-|---------|--------|----------------|
-| Whisper model | tiny.en | medium.en |
-| TTS model | tts-1 | tts-1-hd |
-| Sample rate | 16kHz | 24kHz |
-| Audio format | opus | wav |
-
-### Resource Usage
-
-| Component | CPU | Memory | GPU |
-|-----------|-----|--------|-----|
-| Whisper tiny | 1 core | 200MB | Optional |
-| Whisper base | 2 cores | 500MB | Recommended |
-| Whisper medium | 4 cores | 2GB | Required |
-| Kokoro | 1 core | 500MB | Optional |
-| NanoWakeWord | 0.1 core | 50MB | No |
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-| Problem | Cause | Solution |
-|---------|-------|----------|
-| "No audio input" | Microphone not detected | Check `pyaudio` installation, permissions |
-| "API rate limit" | Too many requests | Implement request queuing, upgrade plan |
-| "High latency" | Network or model size | Use local models or edge deployment |
-| "Poor transcription" | Background noise | Enable noise suppression, use better mic |
-| "Robotic TTS" | Low quality model | Upgrade to `tts-1-hd` or ElevenLabs |
-| "Wake word false positives" | Sensitivity too high | Lower `WAKE_WORD_SENSITIVITY` |
-
-### Debugging
+### Option A: Cloud Voice (OpenAI)
 
 ```bash
-# Check audio devices
-python -c "import pyaudio; p = pyaudio.PyAudio(); [print(p.get_device_info_by_index(i)) for i in range(p.get_device_count())]"
-
-# Test microphone
-python -c "import sounddevice; print(sounddevice.query_devices())"
-
-# Verify API connectivity
-curl -I https://api.openai.com/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"
-
-# Check MCP server logs
-tail -f ~/.claude/logs/mcp-voice.log
-```
-
-### Audio Quality Checklist
-
-- [ ] Microphone sample rate matches config (16kHz recommended)
-- [ ] Background noise is minimized
-- [ ] Audio input is mono (not stereo)
-- [ ] No audio clipping (levels below 0dB)
-- [ ] Consistent volume levels
-
----
-
-## Quick Reference
-
-### Environment Variables Summary
-
-```bash
-# Cloud (OpenAI)
+# Simple cloud-based STT + TTS
 OPENAI_API_KEY="sk-proj-..."
 VOICE_MODE="cloud"
 VOICE_STT_SERVICE="openai"
 VOICE_TTS_SERVICE="openai"
 VOICE_TTS_VOICE="nova"
+```
 
-# Local
+**Cost**: ~$6-38/month depending on usage
+
+### Option B: Local Voice (Whisper + Kokoro)
+
+```bash
+# Free, offline, no API costs
+pip install whisper-cpp-python kokoro-onnx pyaudio
+
 VOICE_MODE="local"
 VOICE_STT_SERVICE="whisper"
 VOICE_TTS_SERVICE="kokoro"
 WHISPER_MODEL="base.en"
+```
 
-# Premium (ElevenLabs)
+### Option C: ElevenLabs (Premium TTS)
+
+```bash
+# Highest quality voice synthesis
 ELEVENLABS_API_KEY="..."
 VOICE_TTS_SERVICE="elevenlabs"
 ELEVENLABS_VOICE_ID="21m00Tcm4TlvDq8ikWAM"
+```
+
+---
+
+## Deployment Architecture
+
+### Production Setup
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    PRODUCTION VOICE ARCHITECTURE                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐               │
+│   │   Web   │   │  Mobile │   │  Watch  │   │ CarPlay │               │
+│   │  App    │   │   App   │   │  App    │   │         │               │
+│   └────┬────┘   └────┬────┘   └────┬────┘   └────┬────┘               │
+│        │             │             │             │                      │
+│        └─────────────┴──────┬──────┴─────────────┘                      │
+│                             │                                            │
+│                             ▼                                            │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │               PERSONAPLEX SERVER (Cloud GPU)                      │  │
+│   │                                                                   │  │
+│   │   Platform: AWS g5.xlarge ($1.01/hr) or Lambda Labs A10 ($0.75/hr) │
+│   │   VRAM: 24GB (runs comfortably without CPU offload)              │  │
+│   │   Latency: 170ms turn-taking                                     │  │
+│   │                                                                   │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                             │                                            │
+│                             │ Fallback if unavailable                   │
+│                             ▼                                            │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                    GEMINI LIVE API                                │  │
+│   │                                                                   │  │
+│   │   Model: gemini-2.5-flash-preview                                │  │
+│   │   Latency: ~200-300ms                                            │  │
+│   │   Cost: Pay-per-use                                              │  │
+│   │                                                                   │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                             │                                            │
+│                             ▼                                            │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                    ARCUS GATEWAY (Vercel)                         │  │
+│   │                                                                   │  │
+│   │   • Memory context injection                                     │  │
+│   │   • Episodic capture                                             │  │
+│   │   • Trust ledger                                                 │  │
+│   │                                                                   │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                             │                                            │
+│                             ▼                                            │
+│   ┌─────────────────────────────────────────────────────────────────┐  │
+│   │                    SUPABASE / NEON                                │  │
+│   │                                                                   │  │
+│   │   • arcus_episodic_memory                                        │  │
+│   │   • arcus_semantic_memory                                        │  │
+│   │   • arcus_voice_queries                                          │  │
+│   │                                                                   │  │
+│   └─────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Cost Estimates
+
+| Component | Low Usage | Moderate | Heavy |
+|-----------|-----------|----------|-------|
+| **PersonaPlex GPU** (Lambda Labs A10) | $75/mo | $150/mo | $300/mo |
+| **Gemini Live** (fallback) | $5/mo | $20/mo | $50/mo |
+| **Wake Word** (NanoWakeWord) | $0 | $0 | $0 |
+| **Total Voice** | **$80/mo** | **$170/mo** | **$350/mo** |
+
+---
+
+## Performance Tuning
+
+### Latency Targets
+
+| Component | Target | Critical |
+|-----------|--------|----------|
+| Wake word detection | <50ms | <100ms |
+| PersonaPlex turn-taking | <170ms | <300ms |
+| PersonaPlex interruption | <240ms | <400ms |
+| Gemini Live (fallback) | <300ms | <500ms |
+| Total end-to-end | <500ms | <1000ms |
+
+### Optimization Checklist
+
+- [ ] Deploy PersonaPlex geographically close to users
+- [ ] Use GPU with sufficient VRAM (24GB+ avoids CPU offload)
+- [ ] Enable WebSocket compression
+- [ ] Cache context prompts when possible
+- [ ] Monitor latency metrics in `arcus_voice_queries` table
+
+### Performance Benchmarks
+
+From NVIDIA's evaluations:
+
+| Metric | PersonaPlex | OpenAI Realtime | Moshi |
+|--------|-------------|-----------------|-------|
+| Turn-taking latency | 170ms | ~200ms | ~160ms |
+| Interruption response | 240ms | ~300ms | ~220ms |
+| Voice customization | Yes | Limited | No |
+| Role customization | Yes | Yes | No |
+| Open source | Yes | No | Yes |
+
+---
+
+## Troubleshooting
+
+### PersonaPlex Issues
+
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| "Connection refused" | Server not running | Start with `python -m moshi.server` |
+| "CUDA out of memory" | Insufficient VRAM | Add `--cpu-offload` flag |
+| "Model not found" | HF token issue | Verify `HF_TOKEN` and license acceptance |
+| High latency | Network or GPU | Check GPU utilization, network latency |
+| Audio distortion | Sample rate mismatch | Ensure 24kHz audio |
+
+### Gemini Live Issues
+
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| "API key invalid" | Wrong key | Verify `GEMINI_API_KEY` |
+| "Quota exceeded" | Rate limit | Implement backoff, upgrade plan |
+| "Model unavailable" | Region/model issue | Check model availability |
+
+### Wake Word Issues
+
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| False positives | Sensitivity too high | Lower `WAKE_WORD_SENSITIVITY` |
+| Missed detections | Sensitivity too low | Raise sensitivity |
+| High CPU usage | Model too large | Use lighter model |
+
+---
+
+## Quick Reference
+
+### Environment Variables
+
+```bash
+# PersonaPlex (Primary)
+HF_TOKEN="your-huggingface-token"
+PERSONAPLEX_URL="wss://personaplex.your-server.com:8998"
+PERSONAPLEX_VOICE="NATF2"
+
+# Gemini Live (Fallback)
+GEMINI_API_KEY="AIzaSy..."
+GEMINI_LIVE_MODEL="gemini-2.5-flash-preview"
 
 # Wake Word
 WAKE_WORD_ENGINE="nanowakeword"
@@ -592,14 +687,24 @@ WAKE_WORD_MODEL="hey_arcus"
 WAKE_WORD_SENSITIVITY="0.5"
 ```
 
-### File Locations
+### Key Files
 
 | Purpose | Path |
 |---------|------|
-| MCP Config | `.claude/skills/knowledge-repository/config/mcp-voice-config.json` |
+| PersonaPlex Guide | `.claude/skills/knowledge-repository/docs/PERSONAPLEX-INTEGRATION.md` |
 | Voice Architecture | `.claude/skills/knowledge-repository/docs/VOICE-ARCHITECTURE.md` |
 | NanoWakeWord Guide | `.claude/skills/knowledge-repository/docs/NANOWAKEWORD-INTEGRATION.md` |
-| PersonaPlex Guide | `.claude/skills/knowledge-repository/docs/PERSONAPLEX-INTEGRATION.md` |
+| Gemini Integration | `.claude/skills/knowledge-repository/docs/GEMINI-INTEGRATION.md` |
+| MCP Voice Config | `.claude/skills/knowledge-repository/config/mcp-voice-config.json` |
+
+---
+
+## References
+
+- **PersonaPlex**: [github.com/NVIDIA/personaplex](https://github.com/NVIDIA/personaplex)
+- **HuggingFace Model**: [huggingface.co/nvidia/personaplex-7b-v1](https://huggingface.co/nvidia/personaplex-7b-v1)
+- **Gemini Live API**: [ai.google.dev/gemini-api/docs/live](https://ai.google.dev/gemini-api/docs/live)
+- **NanoWakeWord**: [github.com/kahrendt/NanoWakeWord](https://github.com/kahrendt/NanoWakeWord)
 
 ---
 
