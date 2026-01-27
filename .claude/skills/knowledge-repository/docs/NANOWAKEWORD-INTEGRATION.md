@@ -512,7 +512,7 @@ export const audioCaptureService = new AudioCaptureService();
 
 ```typescript
 // src/hooks/useVoice.ts
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { wakeWordService } from '@/services/wakeword';
 import { audioCaptureService } from '@/services/audioCapture';
 import { personaPlexService } from '@/services/personaplex';
@@ -523,17 +523,16 @@ export function useVoice() {
   const [state, setState] = useState<VoiceState>('idle');
   const [transcript, setTranscript] = useState('');
 
+  // Use ref to avoid stale closure in audio callback
+  const stateRef = useRef<VoiceState>(state);
   useEffect(() => {
-    async function initialize() {
-      await wakeWordService.initialize();
-      await audioCaptureService.initialize(handleAudioChunk);
-    }
-
-    initialize();
-  }, []);
+    stateRef.current = state;
+  }, [state]);
 
   const handleAudioChunk = useCallback(async (audioData: Int16Array) => {
-    if (state === 'idle' || state === 'listening') {
+    const currentState = stateRef.current;
+
+    if (currentState === 'idle' || currentState === 'listening') {
       const score = await wakeWordService.processAudioChunk(audioData);
 
       if (wakeWordService.isWakeWordDetected(score)) {
@@ -547,10 +546,19 @@ export function useVoice() {
     }
 
     // Forward audio to PersonaPlex if in conversation
-    if (state === 'speaking' || state === 'processing') {
+    if (currentState === 'speaking' || currentState === 'processing') {
       personaPlexService.sendAudio(audioData);
     }
-  }, [state]);
+  }, []); // No dependencies - uses ref for current state
+
+  useEffect(() => {
+    async function initialize() {
+      await wakeWordService.initialize();
+      await audioCaptureService.initialize(handleAudioChunk);
+    }
+
+    initialize();
+  }, [handleAudioChunk]);
 
   const startListening = useCallback(async () => {
     setState('listening');
