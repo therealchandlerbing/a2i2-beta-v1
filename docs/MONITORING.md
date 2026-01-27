@@ -509,19 +509,19 @@ async function checkCostAlert() {
 
 | Alert | Condition | Severity | Channel |
 |-------|-----------|----------|---------|
-| API Down | Health check fails 3x | Critical | SMS, Slack |
-| High Latency | P95 > 2s for 5 min | Warning | Slack |
-| Error Spike | Error rate > 5% | Warning | Slack |
-| Database Full | Storage > 90% | Critical | Email, Slack |
+| API Down | Health check fails 3x | Critical | SMS, Discord |
+| High Latency | P95 > 2s for 5 min | Warning | Discord |
+| Error Spike | Error rate > 5% | Warning | Discord |
+| Database Full | Storage > 90% | Critical | Email, Discord |
 | Cost Exceeded | Daily > budget | Warning | Email |
-| Voice Degraded | Latency > 3s | Warning | Slack |
+| Voice Degraded | Latency > 3s | Warning | Discord |
 
-### Slack Webhook Integration
+### Discord Webhook Integration
 
 ```typescript
 // src/lib/alerts.ts
 
-const SLACK_WEBHOOK = process.env.SLACK_WEBHOOK_URL;
+const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK_URL;
 
 interface Alert {
   level: 'info' | 'warning' | 'critical';
@@ -530,36 +530,36 @@ interface Alert {
   fields?: Record<string, string>;
 }
 
-async function sendSlackAlert(alert: Alert) {
-  if (!SLACK_WEBHOOK) return;
+async function sendDiscordAlert(alert: Alert) {
+  if (!DISCORD_WEBHOOK) return;
 
   const colors = {
-    info: '#36a64f',
-    warning: '#ff9800',
-    critical: '#f44336'
+    info: 0x36a64f,    // Green
+    warning: 0xff9800, // Orange
+    critical: 0xf44336 // Red
   };
 
-  await fetch(SLACK_WEBHOOK, {
+  await fetch(DISCORD_WEBHOOK, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      attachments: [{
-        color: colors[alert.level],
+      embeds: [{
         title: `[${alert.level.toUpperCase()}] ${alert.title}`,
-        text: alert.message,
-        fields: alert.fields ? Object.entries(alert.fields).map(([k, v]) => ({
-          title: k,
-          value: v,
-          short: true
+        description: alert.message,
+        color: colors[alert.level],
+        fields: alert.fields ? Object.entries(alert.fields).map(([name, value]) => ({
+          name,
+          value,
+          inline: true
         })) : undefined,
-        ts: Math.floor(Date.now() / 1000)
+        timestamp: new Date().toISOString()
       }]
     })
   });
 }
 
 // Usage
-sendSlackAlert({
+sendDiscordAlert({
   level: 'warning',
   title: 'High API Latency',
   message: 'P95 latency exceeded 2 seconds',
