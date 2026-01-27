@@ -41,6 +41,39 @@ This guide covers everything needed to bring the A2I2 (Arcus Intelligence) platf
 | **Git** | 2.x | Latest |
 | **PostgreSQL Client** | psql or GUI | TablePlus, pgAdmin, or Supabase Studio |
 
+### Python Dependencies
+
+Install required Python packages:
+
+```bash
+# Core dependencies (required)
+pip install supabase            # Supabase Python client
+pip install google-genai        # Google Gemini SDK (unified SDK)
+
+# Optional dependencies
+pip install anthropic           # Anthropic Claude SDK (if using directly)
+pip install openai              # OpenAI embeddings (optional)
+pip install pydantic            # Data validation
+```
+
+**For voice integration (Phase 5+):**
+```bash
+pip install nanowakeword>=2.0.0  # Wake word detection
+pip install websockets           # PersonaPlex connection
+```
+
+### Node.js Dependencies (for Vercel deployment)
+
+```bash
+# Core dependencies
+npm install @neondatabase/serverless  # Neon database driver
+npm install zod                        # Input validation
+
+# Optional
+npm install @clerk/nextjs              # Authentication
+npm install ai @anthropic-ai/sdk       # AI SDK
+```
+
 ### API Keys to Obtain
 
 Before starting, gather these API keys:
@@ -49,6 +82,7 @@ Before starting, gather these API keys:
 2. **GEMINI_API_KEY** - From [Google AI Studio](https://aistudio.google.com/apikey)
 3. **Database credentials** - From Supabase or Neon dashboard
 4. **OPENAI_API_KEY** (optional) - From [OpenAI Platform](https://platform.openai.com/api-keys)
+5. **HF_TOKEN** (for voice) - From [HuggingFace](https://huggingface.co/settings/tokens)
 
 ---
 
@@ -90,8 +124,8 @@ CREATE EXTENSION IF NOT EXISTS "vector";
 4. Paste into SQL Editor and click **"Run"**
 
 This creates:
-- 30+ tables for memory, entities, skills, and trust tracking
-- 80+ indexes for performance optimization
+- 26 tables for memory, entities, skills, and trust tracking
+- 130+ indexes for performance optimization
 - Row-level security policies
 - Stored functions and triggers
 - Seed data for initial configuration
@@ -165,7 +199,7 @@ WHERE table_schema = 'public' AND table_name LIKE 'arcus_%'
 ORDER BY table_name;
 ```
 
-Expected: ~30 tables starting with `arcus_`
+Expected: 26 tables starting with `arcus_`
 
 ---
 
@@ -408,7 +442,7 @@ See `.claude/skills/knowledge-repository/docs/VOICE-ARCHITECTURE.md` for full vo
 ### Database Verification
 
 ```sql
--- Count tables (should be ~30+)
+-- Count tables (should be 26)
 SELECT COUNT(*) as table_count
 FROM information_schema.tables
 WHERE table_schema = 'public' AND table_name LIKE 'arcus_%';
@@ -422,7 +456,7 @@ SELECT COUNT(*) FROM arcus_skills;  -- Should be 3
 SELECT COUNT(*) FROM arcus_user_preference_vectors;  -- Should be 1
 SELECT COUNT(*) FROM arcus_autonomy_state;  -- Should be 1
 
--- Verify indexes (should be 80+)
+-- Verify indexes (should be 130+)
 SELECT COUNT(*) FROM pg_indexes WHERE schemaname = 'public';
 ```
 

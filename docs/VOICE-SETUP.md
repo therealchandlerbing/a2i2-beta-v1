@@ -216,7 +216,7 @@ Add to `.env.local`:
 ```bash
 # Gemini Live API (Fallback)
 GEMINI_API_KEY="AIzaSy..."
-GEMINI_LIVE_MODEL="gemini-2.5-flash-preview"
+GEMINI_LIVE_MODEL="gemini-2.5-flash-native-audio-preview"
 ```
 
 ### Step 3: Implement Fallback Logic
@@ -292,7 +292,7 @@ from google import genai
 from google.genai import types
 
 GEMINI_LIVE_CONFIG = types.LiveConnectConfig(
-    response_modalities=["AUDIO"],
+    response_modalities=["AUDIO", "TEXT"],
     speech_config=types.SpeechConfig(
         voice_config=types.VoiceConfig(
             prebuilt_voice_config=types.PrebuiltVoiceConfig(
@@ -679,7 +679,7 @@ PERSONAPLEX_VOICE="NATF2"
 
 # Gemini Live (Fallback)
 GEMINI_API_KEY="AIzaSy..."
-GEMINI_LIVE_MODEL="gemini-2.5-flash-preview"
+GEMINI_LIVE_MODEL="gemini-2.5-flash-native-audio-preview"
 
 # Wake Word
 WAKE_WORD_ENGINE="nanowakeword"

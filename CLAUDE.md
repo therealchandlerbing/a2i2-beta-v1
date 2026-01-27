@@ -135,7 +135,8 @@ Core persistent storage:
 - `arcus_episodic_memory` - Events and interactions
 - `arcus_semantic_memory` - Facts and patterns
 - `arcus_procedural_memory` - Workflows and preferences
-- `arcus_knowledge_graph` - Relationships
+- `arcus_entities` - Knowledge graph nodes (people, orgs, projects)
+- `arcus_relationships` - Knowledge graph edges (connections between entities)
 
 ### CLAUDE.memory.md
 Session state file - update this with:
