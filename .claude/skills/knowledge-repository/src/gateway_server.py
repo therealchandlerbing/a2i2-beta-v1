@@ -147,6 +147,25 @@ def create_siri_adapter():
     )
 
 
+def create_websocket_adapter():
+    """Create WebSocket adapter (always enabled)."""
+    from adapter_websocket import WebSocketAdapter
+
+    # Check if explicitly disabled
+    if os.getenv("ARCUS_WEBSOCKET_ENABLED", "true").lower() == "false":
+        return None
+
+    # Get pairing policy if configured
+    use_pairing = os.getenv("ARCUS_WEBSOCKET_PAIRING", "false").lower() == "true"
+    policy = AccessPolicy.PAIRING if use_pairing else AccessPolicy.OPEN
+
+    return WebSocketAdapter(
+        host=os.getenv("ARCUS_GATEWAY_HOST", "0.0.0.0"),
+        port=int(os.getenv("ARCUS_GATEWAY_WS_PORT", "18790")),
+        access_policy=policy,
+    )
+
+
 # =============================================================================
 # MAIN
 # =============================================================================
@@ -178,6 +197,7 @@ async def main() -> None:
 
     # Register adapters
     adapter_factories = {
+        "websocket": create_websocket_adapter,
         "whatsapp": create_whatsapp_adapter,
         "discord": create_discord_adapter,
         "siri": create_siri_adapter,
