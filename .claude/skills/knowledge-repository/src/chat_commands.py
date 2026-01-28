@@ -26,12 +26,53 @@ Usage:
 """
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from channel_adapter import InboundMessage
 
 logger = logging.getLogger("arcus.commands")
+
+
+# =============================================================================
+# INPUT SANITIZATION
+# =============================================================================
+
+# Max length for any command argument (prevents abuse / memory exhaustion)
+_MAX_ARG_LENGTH = 1000
+
+# Patterns that should never appear in command arguments passed to queries.
+# Blocks SQL injection fragments, shell metacharacters, and prompt-injection
+# wrapper tags that could confuse downstream models.
+_DANGEROUS_PATTERNS = [
+    re.compile(r";\s*(DROP|DELETE|UPDATE|INSERT|ALTER|EXEC)\b", re.IGNORECASE),
+    re.compile(r"--\s*$", re.MULTILINE),  # SQL comment terminator at end of line
+    re.compile(r"[`$]"),                   # shell interpolation characters
+    re.compile(r"<\s*/?\s*(system|instruction|prompt|untrusted)\b", re.IGNORECASE),
+]
+
+
+def sanitize_input(text: str) -> str:
+    """
+    Sanitize user input for slash command arguments.
+
+    - Truncates to _MAX_ARG_LENGTH
+    - Strips leading/trailing whitespace
+    - Rejects dangerous patterns by replacing matches with empty string
+    - Logs warnings when dangerous content is stripped
+    """
+    text = text.strip()
+    if len(text) > _MAX_ARG_LENGTH:
+        logger.warning(f"Command arg truncated from {len(text)} to {_MAX_ARG_LENGTH} chars")
+        text = text[:_MAX_ARG_LENGTH]
+
+    for pattern in _DANGEROUS_PATTERNS:
+        if pattern.search(text):
+            logger.warning(f"Stripped dangerous pattern from command input: {pattern.pattern}")
+            text = pattern.sub("", text)
+
+    return text.strip()
 
 
 class ChatCommandHandler:
@@ -114,7 +155,7 @@ class ChatCommandHandler:
         # Parse command and args
         parts = text.split(maxsplit=1)
         command = parts[0].lower()
-        args = parts[1] if len(parts) > 1 else ""
+        args = sanitize_input(parts[1]) if len(parts) > 1 else ""
 
         handler = self._commands.get(command)
         if not handler:

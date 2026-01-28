@@ -53,6 +53,9 @@ class GatewayConfig:
     ws_port: int = 18790  # Avoids Clawdbot's 18789
     http_port: int = 8080  # For webhook adapters (Siri)
 
+    # Security
+    gateway_auth_token: str = ""  # Required in production — rejects unauthenticated requests
+
     # Database
     supabase_url: str = ""
     supabase_key: str = ""
@@ -78,6 +81,7 @@ class GatewayConfig:
             host=os.getenv("ARCUS_GATEWAY_HOST", "127.0.0.1"),
             ws_port=int(os.getenv("ARCUS_GATEWAY_WS_PORT", "18790")),
             http_port=int(os.getenv("ARCUS_GATEWAY_HTTP_PORT", "8080")),
+            gateway_auth_token=os.getenv("GATEWAY_AUTH_TOKEN", ""),
             supabase_url=os.getenv("SUPABASE_URL", ""),
             supabase_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
@@ -403,6 +407,17 @@ class ArcusGateway:
         )
         self.events = EventBus()
 
+        # Security: warn if no auth token in production
+        if not self.config.gateway_auth_token:
+            env = os.getenv("NODE_ENV", "development")
+            if env == "production":
+                logger.warning(
+                    "GATEWAY_AUTH_TOKEN is not set. The gateway will reject all "
+                    "authenticated requests. Set GATEWAY_AUTH_TOKEN in your environment."
+                )
+            else:
+                logger.info("GATEWAY_AUTH_TOKEN not set (dev mode — auth disabled)")
+
         # Initialize middleware (connects all A2I2 modules)
         self.middleware = ArcusMiddleware(MiddlewareConfig(
             supabase_url=self.config.supabase_url,
@@ -436,6 +451,19 @@ class ArcusGateway:
     def get_adapter(self, name: str) -> Optional[ChannelAdapter]:
         """Get a registered adapter by name."""
         return self._adapters.get(name)
+
+    def verify_auth_token(self, token: str) -> bool:
+        """
+        Verify a gateway auth token.
+
+        Returns True if:
+        - No GATEWAY_AUTH_TOKEN is configured (dev mode), OR
+        - The provided token matches the configured token (constant-time comparison)
+        """
+        if not self.config.gateway_auth_token:
+            return True  # Auth disabled (dev mode)
+        import hmac
+        return hmac.compare_digest(token, self.config.gateway_auth_token)
 
     # -------------------------------------------------------------------------
     # Lifecycle
@@ -504,6 +532,21 @@ class ArcusGateway:
         """
         if not self._running:
             return
+
+        # Verify auth token if present in message metadata
+        if self.config.gateway_auth_token:
+            msg_token = message.metadata.get("auth_token", "") if hasattr(message, 'metadata') and message.metadata else ""
+            if not self.verify_auth_token(msg_token):
+                logger.warning(
+                    f"Rejected unauthenticated message from {message.user.channel_user_id} "
+                    f"on {message.channel.value}"
+                )
+                self.middleware.audit.log_auth_failure(
+                    user_id=message.user.channel_user_id,
+                    channel=message.channel.value,
+                    reason="invalid_or_missing_token",
+                )
+                return
 
         # Resolve cross-channel identity
         user_id = message.user.arcus_user_id or message.user.channel_user_id

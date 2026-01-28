@@ -31,11 +31,13 @@ Usage (standalone gateway mode):
 """
 
 import asyncio
+import json
 import logging
 import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from knowledge_operations import (
@@ -54,6 +56,86 @@ from trust_engine import TrustEngine, ActionCategory
 from model_router import ModelRouter
 
 logger = logging.getLogger("arcus.middleware")
+
+
+# =============================================================================
+# AUDIT LOGGER
+# =============================================================================
+
+class AuditLogger:
+    """
+    Structured audit logger for gateway events.
+
+    Writes JSON-lines to a dedicated audit log file. Each entry includes
+    timestamp, event type, user, channel, and event-specific data.
+
+    The audit log captures:
+    - Session start/end
+    - Messages processed (text length only — NOT content, for privacy)
+    - Commands executed
+    - Learnings captured
+    - Auth failures
+    - Trust level changes
+    """
+
+    def __init__(self, log_dir: str = "", enabled: bool = True):
+        self.enabled = enabled
+        if not log_dir:
+            log_dir = os.getenv("ARCUS_AUDIT_LOG_DIR", "logs")
+        self._log_dir = Path(log_dir)
+        self._log_file: Optional[Path] = None
+
+        if self.enabled:
+            self._log_dir.mkdir(parents=True, exist_ok=True)
+            self._log_file = self._log_dir / "audit.jsonl"
+
+    def log(
+        self,
+        event_type: str,
+        user_id: str = "",
+        channel: str = "",
+        **data: Any,
+    ) -> None:
+        """Write an audit entry."""
+        if not self.enabled or not self._log_file:
+            return
+
+        entry = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "event": event_type,
+            "user": user_id,
+            "channel": channel,
+            **data,
+        }
+
+        try:
+            with open(self._log_file, "a") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
+        except Exception as e:
+            logger.debug(f"Audit log write failed: {e}")
+
+    def log_message(self, user_id: str, channel: str, text_length: int, response_length: int) -> None:
+        """Log a message exchange (lengths only, not content)."""
+        self.log("message", user_id=user_id, channel=channel,
+                 text_len=text_length, response_len=response_length)
+
+    def log_command(self, user_id: str, channel: str, command: str) -> None:
+        """Log a slash command execution."""
+        self.log("command", user_id=user_id, channel=channel, command=command)
+
+    def log_learning(self, user_id: str, channel: str, learning_type: str, source: str) -> None:
+        """Log a captured learning."""
+        self.log("learning", user_id=user_id, channel=channel,
+                 learning_type=learning_type, source=source)
+
+    def log_session(self, event: str, user_id: str, channel: str, message_count: int = 0) -> None:
+        """Log session start/end."""
+        self.log(f"session.{event}", user_id=user_id, channel=channel,
+                 message_count=message_count)
+
+    def log_auth_failure(self, user_id: str, channel: str, reason: str = "") -> None:
+        """Log an authentication failure."""
+        self.log("auth_failure", user_id=user_id, channel=channel, reason=reason)
 
 
 # =============================================================================
@@ -87,6 +169,10 @@ class MiddlewareConfig:
     # Verbosity (0=concise, 1=normal, 2=detailed, 3=verbose)
     verbosity_level: int = 1
 
+    # Audit logging
+    audit_enabled: bool = True
+    audit_log_dir: str = ""
+
     @classmethod
     def from_env(cls) -> "MiddlewareConfig":
         return cls(
@@ -99,6 +185,8 @@ class MiddlewareConfig:
             heartbeat_interval_messages=int(os.getenv("ARCUS_HEARTBEAT_INTERVAL", "50")),
             max_history_turns=int(os.getenv("ARCUS_MAX_HISTORY_TURNS", "10")),
             verbosity_level=int(os.getenv("ARCUS_VERBOSITY", "1")),
+            audit_enabled=os.getenv("ARCUS_AUDIT_LOG", "true").lower() == "true",
+            audit_log_dir=os.getenv("ARCUS_AUDIT_LOG_DIR", "logs"),
         )
 
 
@@ -208,6 +296,12 @@ class ArcusMiddleware:
         )
         self.model_router = ModelRouter()
 
+        # Audit logger
+        self.audit = AuditLogger(
+            log_dir=self.config.audit_log_dir,
+            enabled=self.config.audit_enabled,
+        )
+
         # Session store
         self._sessions: Dict[str, MiddlewareSession] = {}
 
@@ -247,6 +341,7 @@ class ArcusMiddleware:
             )
             self._sessions[key] = session
             logger.info(f"New middleware session for {key}")
+            self.audit.log_session("start", user_id=user_id, channel=channel)
 
         return session
 
@@ -257,6 +352,8 @@ class ArcusMiddleware:
         if session:
             self._flush_session(session)
             logger.info(f"Ended session for {key} ({session.message_count} messages)")
+            self.audit.log_session("end", user_id=user_id, channel=channel,
+                                   message_count=session.message_count)
         return session
 
     def _flush_session(self, session: MiddlewareSession) -> None:
@@ -439,6 +536,9 @@ class ArcusMiddleware:
         """
         session = self.get_or_create_session(user_id, channel, chat_id)
 
+        # Audit log (lengths only — not content, for privacy)
+        self.audit.log_message(user_id, channel, len(user_text), len(ai_response))
+
         # Update conversation history
         session.add_turn(user_text, ai_response, max_turns=self.config.max_history_turns)
 
@@ -452,6 +552,7 @@ class ArcusMiddleware:
                     "source": "auto_correction_detection",
                 })
                 logger.info(f"Auto-captured correction: {user_text[:80]}...")
+                self.audit.log_learning(user_id, channel, "preference", "auto_correction")
 
             if detect_decision(user_text):
                 session.pending_learnings.append({
@@ -463,6 +564,7 @@ class ArcusMiddleware:
                     "source": "auto_decision_detection",
                 })
                 logger.info(f"Auto-captured decision: {user_text[:80]}...")
+                self.audit.log_learning(user_id, channel, "event", "auto_decision")
 
         # Log to Trust Ledger
         if self.config.trust_tracking_enabled:
