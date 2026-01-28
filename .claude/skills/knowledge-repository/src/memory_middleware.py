@@ -490,8 +490,8 @@ class ArcusMiddleware:
                 )
 
                 context_payload = self.budget_manager.assemble_context(packed)
-                if context_payload:
-                    parts.append(context_payload)
+                if context_payload and context_payload.formatted_context:
+                    parts.append(context_payload.formatted_context)
 
         except Exception as e:
             logger.debug(f"Recall failed, falling back to direct query: {e}")

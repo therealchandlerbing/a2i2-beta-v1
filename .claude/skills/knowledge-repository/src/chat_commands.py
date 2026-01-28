@@ -16,6 +16,7 @@ Supported Commands:
     /new                - Start fresh session (preserve memory)
     /compact            - Compress conversation context
     /verbose [0-3]      - Set response detail level
+    /pair [code]        - Device pairing with codes
     /help               - List available commands
 
 Usage:
@@ -31,6 +32,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from channel_adapter import InboundMessage
+from pairing_manager import PairingManager
 
 logger = logging.getLogger("arcus.commands")
 
@@ -86,16 +88,18 @@ class ChatCommandHandler:
     Supabase queries — ensuring consistency with the core A2I2 modules.
     """
 
-    def __init__(self, middleware=None, supabase_url: str = "", supabase_key: str = ""):
+    def __init__(self, middleware=None, supabase_url: str = "", supabase_key: str = "", pairing_manager: Optional[PairingManager] = None):
         """
         Args:
             middleware: ArcusMiddleware instance (preferred — connects all A2I2 modules)
             supabase_url: Fallback direct Supabase URL (if no middleware)
             supabase_key: Fallback direct Supabase key (if no middleware)
+            pairing_manager: PairingManager instance (optional)
         """
         self.middleware = middleware
         self._knowledge_repo = None
         self._trust_engine = None
+        self.pairing_manager = pairing_manager or PairingManager()
 
         # Initialize from middleware if available
         if middleware:
@@ -126,6 +130,7 @@ class ChatCommandHandler:
             "/new": self._cmd_new,
             "/compact": self._cmd_compact,
             "/verbose": self._cmd_verbose,
+            "/pair": self._cmd_pair,
             "/help": self._cmd_help,
         }
 
@@ -571,6 +576,99 @@ class ChatCommandHandler:
 
         return f"Verbosity set to **{level}** — {level_descriptions[level]}"
 
+    async def _cmd_pair(self, args: str, message: InboundMessage = None, **kwargs) -> str:
+        """Handle device pairing with codes."""
+        if not message:
+            return "Pairing command requires message context."
+
+        user_id = message.user.arcus_user_id or message.user.channel_user_id
+        device_id = message.user.channel_user_id
+        channel = message.channel.value
+
+        # No args: check pairing status
+        if not args:
+            if self.pairing_manager.is_paired(device_id, channel):
+                device = self.pairing_manager.get_paired_device(device_id)
+                paired_since = device.paired_at.strftime("%Y-%m-%d %H:%M UTC") if device else "unknown"
+                return (
+                    f"**Device Paired** ✓\n\n"
+                    f"• Device: `{device_id}`\n"
+                    f"• User: `{user_id}`\n"
+                    f"• Channel: {channel}\n"
+                    f"• Since: {paired_since}\n\n"
+                    "Use `/pair unpair` to unpair this device."
+                )
+            else:
+                return (
+                    "**Device Not Paired**\n\n"
+                    "To pair this device:\n"
+                    "1. Generate a code: `/pair generate`\n"
+                    "2. Enter the code: `/pair <code>`\n\n"
+                    "Pairing codes expire after 15 minutes."
+                )
+
+        # Parse subcommand
+        parts = args.strip().split(maxsplit=1)
+        subcommand = parts[0].lower()
+
+        # Generate a new pairing code
+        if subcommand == "generate":
+            code = self.pairing_manager.generate_code(user_id=user_id, channel=channel)
+            stats = self.pairing_manager.get_stats()
+            return (
+                f"**Pairing Code Generated** 🔑\n\n"
+                f"Code: `{code}`\n"
+                f"Valid for: 15 minutes\n"
+                f"Channel: {channel}\n\n"
+                f"To pair, enter: `/pair {code}`\n\n"
+                f"_Active codes: {stats['active_codes']} | Paired devices: {stats['paired_devices']}_"
+            )
+
+        # Unpair current device
+        elif subcommand == "unpair":
+            if self.pairing_manager.unpair_device(device_id):
+                return (
+                    f"**Device Unpaired**\n\n"
+                    f"Device `{device_id}` has been unpaired from user `{user_id}`.\n"
+                    "Use `/pair generate` to create a new pairing code."
+                )
+            else:
+                return "Device was not paired."
+
+        # List all paired devices for this user
+        elif subcommand == "list":
+            devices = self.pairing_manager.get_user_devices(user_id)
+            if not devices:
+                return f"No devices paired to user `{user_id}`."
+
+            lines = [f"**Paired Devices for {user_id}**\n"]
+            for dev in devices:
+                lines.append(
+                    f"• `{dev.device_id}` on {dev.channel} — paired {dev.paired_at.strftime('%Y-%m-%d')}"
+                )
+            return "\n".join(lines)
+
+        # Treat args as pairing code
+        else:
+            code = args.strip()
+            result = self.pairing_manager.pair_device(
+                code=code,
+                device_id=device_id,
+                channel=channel,
+                nickname=message.user.display_name
+            )
+
+            if result.success:
+                return (
+                    f"**Device Paired Successfully** ✓\n\n"
+                    f"• Device: `{result.device_id}`\n"
+                    f"• User: `{result.user_id}`\n"
+                    f"• Channel: {channel}\n\n"
+                    "You now have full access to Arcus Intelligence."
+                )
+            else:
+                return f"**Pairing Failed**\n\n{result.error}"
+
     async def _cmd_help(self, args: str = "", **kwargs) -> str:
         """List available commands."""
         return (
@@ -583,7 +681,8 @@ class ChatCommandHandler:
             "• `/context` — Show current session state\n"
             "• `/preferences` — Display learned preferences\n"
             "• `/autonomy` — Show trust level\n"
-            "• `/status` — System health\n\n"
+            "• `/status` — System health\n"
+            "• `/pair [code]` — Pair device with code\n\n"
             "**Control**\n"
             "• `/reflect` — Trigger pattern synthesis\n"
             "• `/new` — Start fresh session (memory preserved)\n"

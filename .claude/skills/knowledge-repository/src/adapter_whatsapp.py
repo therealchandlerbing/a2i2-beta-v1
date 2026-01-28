@@ -69,6 +69,8 @@ class WhatsAppAdapter(ChannelAdapter):
         allowlist: Optional[List[str]] = None,
         send_read_receipts: bool = True,
         send_typing_indicator: bool = True,
+        auto_reconnect: bool = True,
+        max_reconnect_attempts: int = 10,
     ):
         super().__init__(
             name="whatsapp",
@@ -80,8 +82,12 @@ class WhatsAppAdapter(ChannelAdapter):
         self.bridge_url = bridge_url
         self.send_read_receipts = send_read_receipts
         self.send_typing_indicator = send_typing_indicator
+        self.auto_reconnect = auto_reconnect
+        self.max_reconnect_attempts = max_reconnect_attempts
         self._ws = None
         self._listen_task: Optional[asyncio.Task] = None
+        self._reconnect_attempts = 0
+        self._message_queue: List[Dict[str, Any]] = []  # Queue for messages during reconnection
 
     # -------------------------------------------------------------------------
     # Lifecycle
@@ -99,8 +105,12 @@ class WhatsAppAdapter(ChannelAdapter):
         try:
             self._ws = await websockets.connect(self.bridge_url)
             self._connected = True
+            self._reconnect_attempts = 0  # Reset on successful connection
             self._listen_task = asyncio.create_task(self._listen_loop())
             logger.info(f"WhatsApp adapter connected to bridge at {self.bridge_url}")
+
+            # Flush any queued messages
+            await self._flush_queue()
         except Exception as e:
             self._connected = False
             logger.error(f"WhatsApp bridge connection failed: {e}")
@@ -117,34 +127,86 @@ class WhatsAppAdapter(ChannelAdapter):
             self._ws = None
         logger.info("WhatsApp adapter disconnected")
 
+    async def _reconnect(self) -> bool:
+        """
+        Attempt to reconnect to the bridge with exponential backoff.
+
+        Returns:
+            True if reconnection succeeded, False if max attempts reached
+        """
+        if not self.auto_reconnect:
+            return False
+
+        self._reconnect_attempts += 1
+
+        if self._reconnect_attempts > self.max_reconnect_attempts:
+            logger.error(
+                f"WhatsApp reconnection failed after {self.max_reconnect_attempts} attempts"
+            )
+            return False
+
+        # Exponential backoff: 2^(attempt-1) seconds, max 60s
+        delay = min(2 ** (self._reconnect_attempts - 1), 60)
+        logger.info(
+            f"WhatsApp reconnecting in {delay}s (attempt {self._reconnect_attempts}/"
+            f"{self.max_reconnect_attempts})"
+        )
+        await asyncio.sleep(delay)
+
+        try:
+            import websockets
+            self._ws = await websockets.connect(self.bridge_url)
+            self._connected = True
+            self._reconnect_attempts = 0
+            logger.info("WhatsApp reconnected successfully")
+
+            # Flush queued messages
+            await self._flush_queue()
+            return True
+        except Exception as e:
+            logger.warning(f"WhatsApp reconnect attempt failed: {e}")
+            return False
+
     # -------------------------------------------------------------------------
     # Messaging
     # -------------------------------------------------------------------------
 
     async def send(self, message: OutboundMessage) -> SendResult:
-        """Send a message via WhatsApp."""
+        """Send a message via WhatsApp. Queues if disconnected and auto-reconnect is enabled."""
+        payload = {
+            "action": "send",
+            "jid": message.chat.chat_id,
+            "text": message.text,
+        }
+
+        if message.reply_to_id:
+            payload["quoted_id"] = message.reply_to_id
+
+        if message.attachments:
+            attachment = message.attachments[0]
+            payload["media"] = {
+                "type": attachment.content_type,
+                "caption": attachment.caption or "",
+            }
+            if attachment.url:
+                payload["media"]["url"] = attachment.url
+
+        # Queue message if disconnected and auto-reconnect enabled
+        if (not self._ws or not self._connected) and self.auto_reconnect:
+            self._message_queue.append(payload)
+            logger.info(
+                f"WhatsApp disconnected - queued message (queue size: {len(self._message_queue)})"
+            )
+            return SendResult(
+                success=True,
+                message_id=f"queued-{len(self._message_queue)}",
+                metadata={"queued": True}
+            )
+
         if not self._ws or not self._connected:
             return SendResult(success=False, error="Not connected to WhatsApp bridge")
 
         try:
-            payload = {
-                "action": "send",
-                "jid": message.chat.chat_id,
-                "text": message.text,
-            }
-
-            if message.reply_to_id:
-                payload["quoted_id"] = message.reply_to_id
-
-            if message.attachments:
-                attachment = message.attachments[0]
-                payload["media"] = {
-                    "type": attachment.content_type,
-                    "caption": attachment.caption or "",
-                }
-                if attachment.url:
-                    payload["media"]["url"] = attachment.url
-
             await self._ws.send(json.dumps(payload))
 
             # Wait for send confirmation
@@ -160,6 +222,31 @@ class WhatsAppAdapter(ChannelAdapter):
         except Exception as e:
             logger.error(f"WhatsApp send error: {e}", exc_info=True)
             return SendResult(success=False, error=str(e))
+
+    async def _flush_queue(self) -> None:
+        """Send all queued messages after reconnection."""
+        if not self._message_queue:
+            return
+
+        logger.info(f"Flushing {len(self._message_queue)} queued WhatsApp messages")
+        failed = []
+
+        for payload in self._message_queue:
+            try:
+                if self._ws and self._connected:
+                    await self._ws.send(json.dumps(payload))
+                    # Don't wait for confirmation during flush (fire-and-forget)
+                else:
+                    failed.append(payload)
+            except Exception as e:
+                logger.warning(f"Failed to flush queued message: {e}")
+                failed.append(payload)
+
+        self._message_queue = failed
+        if failed:
+            logger.warning(f"{len(failed)} queued messages failed to send")
+        else:
+            logger.info("All queued messages sent successfully")
 
     # -------------------------------------------------------------------------
     # Inbound message processing
@@ -195,7 +282,14 @@ class WhatsAppAdapter(ChannelAdapter):
                         if status == "close":
                             logger.warning("WhatsApp bridge connection closed")
                             self._connected = False
-                            break
+                            if self._ws:
+                                await self._ws.close()
+                                self._ws = None
+                            # Attempt reconnection if enabled
+                            if await self._reconnect():
+                                continue  # Resume listening after successful reconnect
+                            else:
+                                break  # Exit if reconnect failed
 
                 except json.JSONDecodeError as e:
                     logger.warning(f"Invalid JSON from WhatsApp bridge: {e}")

@@ -70,6 +70,8 @@ class GatewayConfig:
     # Session
     session_timeout_minutes: int = 30
     max_sessions: int = 100
+    session_reset_policy: str = "idle"  # Options: "idle", "daily", "manual"
+    daily_reset_hour: int = 3  # Hour (0-23) for daily reset (UTC)
 
     @classmethod
     def from_env(cls) -> "GatewayConfig":
@@ -89,6 +91,8 @@ class GatewayConfig:
             auto_learn_enabled=os.getenv("ARCUS_AUTO_LEARN", "true").lower() == "true",
             session_timeout_minutes=int(os.getenv("ARCUS_SESSION_TIMEOUT", "30")),
             max_sessions=int(os.getenv("ARCUS_MAX_SESSIONS", "100")),
+            session_reset_policy=os.getenv("ARCUS_SESSION_RESET_POLICY", "idle"),
+            daily_reset_hour=int(os.getenv("ARCUS_DAILY_RESET_HOUR", "3")),
         )
 
 
@@ -122,13 +126,22 @@ class GatewaySession:
 
 
 class SessionManager:
-    """Manages gateway sessions with automatic cleanup."""
+    """Manages gateway sessions with automatic cleanup and reset policies."""
 
-    def __init__(self, max_sessions: int = 100, timeout_minutes: int = 30):
+    def __init__(
+        self,
+        max_sessions: int = 100,
+        timeout_minutes: int = 30,
+        reset_policy: str = "idle",
+        daily_reset_hour: int = 3
+    ):
         self._sessions: Dict[str, GatewaySession] = {}
         self._user_sessions: Dict[str, str] = {}  # user_key -> session_id
         self.max_sessions = max_sessions
         self.timeout_minutes = timeout_minutes
+        self.reset_policy = reset_policy
+        self.daily_reset_hour = daily_reset_hour
+        self._last_daily_reset: Optional[datetime] = None
 
     def _user_key(self, user_id: str, channel: ChannelType, chat_id: str) -> str:
         return f"{channel.value}:{user_id}:{chat_id}"
@@ -182,12 +195,44 @@ class SessionManager:
         return list(self._sessions.values())
 
     def _cleanup_expired(self) -> None:
-        """Remove expired sessions."""
-        expired = [sid for sid, s in self._sessions.items() if s.is_expired]
-        for sid in expired:
-            self.end(sid)
-        if expired:
-            logger.info(f"Cleaned up {len(expired)} expired sessions")
+        """Remove expired sessions based on reset policy."""
+        # Check for daily reset
+        if self.reset_policy == "daily" and self._should_daily_reset():
+            self._do_daily_reset()
+            return
+
+        # Regular idle timeout cleanup (for "idle" and "manual" policies)
+        if self.reset_policy in ["idle", "manual"]:
+            expired = [sid for sid, s in self._sessions.items() if s.is_expired]
+            for sid in expired:
+                self.end(sid)
+            if expired:
+                logger.info(f"Cleaned up {len(expired)} expired sessions (idle timeout)")
+
+    def _should_daily_reset(self) -> bool:
+        """Check if it's time for the daily reset."""
+        now = datetime.now(timezone.utc)
+        current_hour = now.hour
+
+        # If we haven't done a reset yet
+        if self._last_daily_reset is None:
+            return current_hour >= self.daily_reset_hour
+
+        # Use date-based checking to ensure only one reset per day
+        last_reset_date = self._last_daily_reset.date()
+        current_date = now.date()
+
+        # Only reset if we're on a different date AND past the reset hour
+        return current_date > last_reset_date and current_hour >= self.daily_reset_hour
+
+    def _do_daily_reset(self) -> None:
+        """Reset all sessions as part of daily reset policy."""
+        session_count = len(self._sessions)
+        if session_count > 0:
+            logger.info(f"Daily reset: clearing {session_count} sessions at {self.daily_reset_hour}:00 UTC")
+            for sid in list(self._sessions.keys()):
+                self.end(sid)
+        self._last_daily_reset = datetime.now(timezone.utc)
 
 
 # =============================================================================
@@ -276,9 +321,12 @@ class MessageProcessor:
         messages = list(pre_result.get("history", []))
         messages.append({"role": "user", "content": message.text})
 
-        # 4. Call AI model
+        # 4. Get model routing decision from middleware
+        routing_decision = pre_result.get("model_recommendation")
+
+        # 5. Call AI model with routed model selection
         try:
-            response = await self._call_model(system_prompt, messages)
+            response = await self._call_model(system_prompt, messages, routing_decision)
         except Exception as e:
             logger.error(f"Model call failed: {e}", exc_info=True)
             response = "I'm having trouble processing that right now. Please try again."
@@ -311,20 +359,65 @@ class MessageProcessor:
 
         return "\n".join(parts)
 
-    async def _call_model(self, system_prompt: str, messages: List[Dict[str, str]]) -> str:
+    async def _call_model(
+        self,
+        system_prompt: str,
+        messages: List[Dict[str, str]],
+        routing_decision: Optional[Any] = None
+    ) -> str:
         """
         Call the AI model with full conversation history.
 
-        Tries Claude first, falls back to Gemini.
+        Uses model router recommendation if available, otherwise falls back
+        to Claude -> Gemini -> error.
+
+        Args:
+            system_prompt: System prompt with memory context
+            messages: Conversation history
+            routing_decision: RoutingDecision from ModelRouter (optional)
         """
-        # Try Claude
+        # Use routing decision if available
+        if routing_decision:
+            model_id = routing_decision.model_id
+            provider = routing_decision.model_config.provider
+            thinking_level = routing_decision.thinking_level
+
+            logger.info(
+                f"Using routed model: {model_id} (confidence: {routing_decision.confidence:.2f}, "
+                f"reasoning: {routing_decision.reasoning})"
+            )
+
+            try:
+                if provider == "anthropic" and self.config.anthropic_api_key:
+                    return await self._call_claude(system_prompt, messages, model_id)
+                elif provider == "google" and self.config.gemini_api_key:
+                    return await self._call_gemini(system_prompt, messages, model_id, thinking_level)
+                else:
+                    logger.warning(f"Routed provider {provider} not configured, falling back")
+            except Exception as e:
+                logger.warning(f"Routed model {model_id} failed: {e}, trying fallback")
+                if routing_decision.fallback_model:
+                    logger.info(f"Trying fallback: {routing_decision.fallback_model}")
+                    try:
+                        # Determine provider from fallback model ID
+                        fallback_id = routing_decision.fallback_model
+                        if "claude" in fallback_id.lower():
+                            if self.config.anthropic_api_key:
+                                return await self._call_claude(system_prompt, messages, fallback_id)
+                        elif "gemini" in fallback_id.lower():
+                            if self.config.gemini_api_key:
+                                return await self._call_gemini(system_prompt, messages, fallback_id)
+                    except Exception as fallback_error:
+                        logger.warning(f"Fallback model {fallback_id} also failed: {fallback_error}")
+
+        # Final fallback: Try Claude first
         if self.config.anthropic_api_key:
             try:
                 return await self._call_claude(system_prompt, messages)
             except Exception as e:
                 logger.warning(f"Claude call failed, trying Gemini: {e}")
 
-        # Try Gemini
+        # Fallback: Try Gemini
         if self.config.gemini_api_key:
             try:
                 return await self._call_gemini(system_prompt, messages)
@@ -333,20 +426,32 @@ class MessageProcessor:
 
         return "I'm unable to process your request right now. Please check API configuration."
 
-    async def _call_claude(self, system_prompt: str, messages: List[Dict[str, str]]) -> str:
+    async def _call_claude(
+        self,
+        system_prompt: str,
+        messages: List[Dict[str, str]],
+        model_id: Optional[str] = None
+    ) -> str:
         """Call Anthropic Claude API with conversation history."""
         import anthropic
 
         client = anthropic.AsyncAnthropic(api_key=self.config.anthropic_api_key)
+        model = model_id or self.config.default_model
         response = await client.messages.create(
-            model=self.config.default_model,
+            model=model,
             max_tokens=1024,
             system=system_prompt,
             messages=messages,
         )
         return response.content[0].text
 
-    async def _call_gemini(self, system_prompt: str, messages: List[Dict[str, str]]) -> str:
+    async def _call_gemini(
+        self,
+        system_prompt: str,
+        messages: List[Dict[str, str]],
+        model_id: Optional[str] = None,
+        thinking_level: Optional[str] = None
+    ) -> str:
         """Call Google Gemini API with conversation history."""
         from google import genai
 
@@ -358,10 +463,18 @@ class MessageProcessor:
         full_prompt = f"{system_prompt}\n\n{history_text}"
 
         client = genai.Client(api_key=self.config.gemini_api_key)
+        model = model_id or "gemini-2.5-flash"
+
+        # Build config with thinking level if supported
+        config_kwargs = {}
+        if thinking_level and thinking_level != "budget":
+            config_kwargs["thinking_level"] = thinking_level
+
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model="gemini-2.5-flash",
+            model=model,
             contents=full_prompt,
+            **config_kwargs
         )
         return response.text
 
@@ -401,6 +514,8 @@ class ArcusGateway:
         self.sessions = SessionManager(
             max_sessions=self.config.max_sessions,
             timeout_minutes=self.config.session_timeout_minutes,
+            reset_policy=self.config.session_reset_policy,
+            daily_reset_hour=self.config.daily_reset_hour,
         )
         self.events = EventBus()
 

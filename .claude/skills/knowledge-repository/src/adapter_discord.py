@@ -215,6 +215,14 @@ class DiscordAdapter(ChannelAdapter):
         if text.startswith("/"):
             content_type = MessageContentType.COMMAND
 
+        # Detect if message is in a thread
+        is_thread = isinstance(msg.channel, discord.Thread)
+        thread_name = msg.channel.name if is_thread else None
+        parent_channel_id = str(msg.channel.parent_id) if is_thread and hasattr(msg.channel, 'parent_id') else None
+
+        # Use thread ID as chat_id to maintain separate conversation state per thread
+        chat_id = str(msg.channel.id)
+
         return InboundMessage(
             id=str(msg.id),
             channel=ChannelType.DISCORD,
@@ -225,9 +233,15 @@ class DiscordAdapter(ChannelAdapter):
                 display_name=msg.author.display_name,
             ),
             chat=ChatContext(
-                chat_id=str(msg.channel.id),
+                chat_id=chat_id,
                 is_group=not is_dm,
-                group_name=msg.guild.name if msg.guild else None,
+                group_name=thread_name if is_thread else (msg.guild.name if msg.guild else None),
+                metadata={
+                    "is_thread": is_thread,
+                    "thread_name": thread_name,
+                    "parent_channel_id": parent_channel_id,
+                    "guild_id": str(msg.guild.id) if msg.guild else None,
+                },
             ),
             attachments=attachments,
             reply_to_id=str(msg.reference.message_id) if msg.reference else None,
@@ -239,18 +253,32 @@ class DiscordAdapter(ChannelAdapter):
     # -------------------------------------------------------------------------
 
     async def send(self, message: OutboundMessage) -> SendResult:
-        """Send a message to a Discord channel."""
+        """Send a message to a Discord channel or thread."""
         if not self._client or not self._connected:
             return SendResult(success=False, error="Discord client not connected")
 
         try:
+            import discord
+
             channel = self._client.get_channel(int(message.chat.chat_id))
             if not channel:
                 channel = await self._client.fetch_channel(int(message.chat.chat_id))
 
+            # Handle archived threads - unarchive before sending
+            if isinstance(channel, discord.Thread) and channel.archived:
+                try:
+                    await channel.edit(archived=False)
+                    logger.info(f"Unarchived thread {channel.id} to send message")
+                except discord.Forbidden:
+                    return SendResult(
+                        success=False,
+                        error="Cannot send to archived thread (insufficient permissions)"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to unarchive thread: {e}")
+
             # Check if response should be an embed
             if message.metadata.get("embed"):
-                import discord
                 embed_data = message.metadata["embed"]
                 embed = discord.Embed(
                     title=embed_data.get("title", ""),
@@ -277,7 +305,6 @@ class DiscordAdapter(ChannelAdapter):
                     reference = None
                     if message.reply_to_id:
                         try:
-                            import discord
                             reference = discord.MessageReference(
                                 message_id=int(message.reply_to_id),
                                 channel_id=int(message.chat.chat_id),
