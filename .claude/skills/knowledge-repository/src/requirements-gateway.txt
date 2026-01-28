@@ -1,0 +1,21 @@
+# Arcus Gateway - Python Dependencies
+# Install: pip install -r requirements-gateway.txt
+
+# Core gateway
+aiohttp>=3.9.0          # Siri webhook HTTP server
+websockets>=12.0        # WhatsApp bridge + WebSocket gateway
+
+# Discord adapter
+discord.py>=2.3.0       # Discord bot client
+
+# AI model clients
+anthropic>=0.40.0       # Claude API
+google-genai>=1.0.0     # Gemini API
+
+# Database
+supabase>=2.0.0         # Supabase client for memory operations
+
+# Optional: WhatsApp bridge (Node.js)
+# The WhatsApp adapter communicates with a Baileys Node.js bridge.
+# See: https://github.com/WhiskeySockets/Baileys
+# Install separately: npm install @whiskeysockets/baileys

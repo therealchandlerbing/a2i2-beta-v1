@@ -2752,6 +2752,201 @@ checkpointing:
 
 <br/>
 
+<details>
+<summary><b>🤖 ClawdBot</b> — Multi-channel AI assistant platform <code>✅ PATTERNS ADOPTED</code></summary>
+
+<br/>
+
+**Repository:** [github.com/clawdbot/clawdbot](https://github.com/clawdbot/clawdbot)
+**Stars:** See [GitHub repository](https://github.com/clawdbot/clawdbot) for current count
+**Reviewed:** 2026-01-28 (Forensic Level)
+**Integration Plan:** [CLAWDBOT-INTEGRATION.md](.claude/skills/knowledge-repository/docs/CLAWDBOT-INTEGRATION.md)
+
+### Executive Summary
+
+ClawdBot is a mature personal AI assistant platform that excels at **accessibility and distribution** — making AI available everywhere users already are. A2I2 excels at **memory and intelligence**. These systems are complementary: ClawdBot provides the "where" (multi-channel access), while A2I2 provides the "what" (persistent memory and organizational intelligence).
+
+**Decision: ✅ ADOPT PATTERNS** — Integrate ClawdBot's multi-channel and gateway architecture into A2I2
+
+### Core Architecture: Gateway Control Plane
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    ClawdBot Architecture                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│   WebSocket Gateway (ws://127.0.0.1:18789)                   │
+│   ┌─────────────────────────────────────────────────────┐   │
+│   │  Single Control Plane for:                           │   │
+│   │  • Sessions    • Channels    • Tools    • Events    │   │
+│   └─────────────────────────────────────────────────────┘   │
+│                           │                                   │
+│         ┌─────────────────┼─────────────────┐                │
+│         ▼                 ▼                 ▼                │
+│   ┌──────────┐     ┌──────────┐     ┌──────────┐           │
+│   │ Messaging│     │  Device  │     │  Agent   │           │
+│   │ Channels │     │  Nodes   │     │ Runtime  │           │
+│   └──────────┘     └──────────┘     └──────────┘           │
+│   12+ platforms    macOS/iOS/       Pi agent               │
+│   WhatsApp,Slack   Android apps     RPC mode               │
+│   Telegram,etc.    camera,screen    tool streaming         │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Supported Channels (12+)
+
+| Channel | Integration Library | Security |
+|:--------|:--------------------|:---------|
+| **WhatsApp** | Baileys | Pairing policy |
+| **Telegram** | grammY | Pairing policy |
+| **Slack** | Bolt | Allowlist |
+| **Discord** | discord.js | Allowlist |
+| **Microsoft Teams** | MS Graph | Pairing policy |
+| **Signal** | signal-cli | Pairing policy |
+| **iMessage** | imsg | Pairing policy |
+| **Google Chat** | Google API | Allowlist |
+| **Matrix** | Matrix SDK | Allowlist |
+| **BlueBubbles** | BB API | Pairing policy |
+| **Zalo** | Zalo API | Allowlist |
+| **WebChat** | Native | Open |
+
+### Feature Comparison: ClawdBot vs A2I2
+
+| Capability | ClawdBot | A2I2 | Winner |
+|:-----------|:--------:|:----:|:------:|
+| **Multi-channel access** | 12+ platforms | None currently | ClawdBot |
+| **Cross-session memory** | Limited session state | 5 memory types + graph | A2I2 |
+| **Voice integration** | ElevenLabs always-on | PersonaPlex planned | ClawdBot (shipped) |
+| **Device companion apps** | macOS, iOS, Android | None | ClawdBot |
+| **Knowledge graph** | None | Full entity relationships | A2I2 |
+| **Multi-model orchestration** | Claude/OpenAI failover | Model router + Gemini | A2I2 |
+| **Trust/autonomy tracking** | None | Autonomy Trust Ledger | A2I2 |
+| **Enterprise readiness** | Single user focus | Team/org design | A2I2 |
+| **Sandbox security** | Docker per-session | Planned | ClawdBot |
+| **Skills marketplace** | ClawdHub registry | Skill system, no registry | ClawdBot |
+
+### Key Patterns Adopted for A2I2
+
+**1. "Meet Users Where They Are" Philosophy**
+Multi-channel access so users don't change behavior — message on WhatsApp, Discord, or Telegram and AI responds.
+
+**A2I2 Priority Channels:**
+1. **WhatsApp** — Primary team communication
+2. **Discord** — Community and async collaboration
+3. **Siri Shortcuts** — iOS voice via "Hey Siri, ask Arcus..."
+4. **Web Widget** — Embeddable interface
+
+**2. Chat Commands UX**
+Memory-aware slash commands for A2I2:
+```
+/recall <query>     - Search knowledge graph
+/learn <statement>  - Explicit knowledge capture
+/forget <topic>     - Request knowledge removal
+/context            - Show current session memory
+/preferences        - Display learned preferences
+/autonomy           - Show trust level and permissions
+/reflect            - Trigger pattern synthesis
+```
+
+**3. Gateway API Design**
+Single unified endpoint for all interfaces:
+```
+Arcus Gateway:  ws://127.0.0.1:18790
+```
+
+**4. Workspace Injection Pattern**
+ClawdBot injects context via markdown files (`AGENTS.md`, `SOUL.md`, `TOOLS.md`). A2I2 already aligns with `CLAUDE.md`, `CLAUDE.memory.md`, and `SKILL.md`. Enhancement: dynamic injection of episodic memories, entity relationships, and procedural patterns.
+
+**5. Sandbox Security Model**
+Per-session Docker containers with allowlist/denylist for tools — critical for enterprise multi-user scenarios with Trust Ledger auditing.
+
+### Integration Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│            A2I2 + ClawdBot Patterns (Combined)               │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
+│   │ WhatsApp │  │ Discord  │  │   Siri   │  │   Web    │  │
+│   │ (Baileys)│  │(discord.js)│ │(Shortcuts)│ │ (Widget) │  │
+│   └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  │
+│        │              │              │              │        │
+│        └──────────────┴──────┬───────┴──────────────┘        │
+│                              ▼                               │
+│                  ┌─────────────────────┐                     │
+│                  │   Arcus Gateway     │                     │
+│                  │   ws://localhost:    │                     │
+│                  │       18790         │                     │
+│                  └─────────┬───────────┘                     │
+│                            │                                 │
+│              ┌─────────────┼─────────────┐                   │
+│              ▼             ▼             ▼                   │
+│        ┌──────────┐ ┌──────────┐ ┌──────────┐              │
+│        │  Memory  │ │  Model   │ │  Trust   │              │
+│        │  Engine  │ │  Router  │ │  Ledger  │              │
+│        └──────────┘ └──────────┘ └──────────┘              │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Roadmap
+
+**Phase A: Foundation (Weeks 1-2)**
+- [ ] Design Arcus Gateway API specification
+- [ ] Implement webhook endpoint for Siri Shortcuts
+- [ ] Create iOS Shortcut template ("Ask Arcus")
+- [ ] Test voice → text → response → speech flow
+
+**Phase B: WhatsApp Integration (Weeks 3-4)**
+- [ ] Set up Baileys WhatsApp Web connection
+- [ ] Implement message handlers with memory injection
+- [ ] Add voice message transcription pipeline
+- [ ] Group chat context capture
+
+**Phase C: Discord + Gateway (Weeks 5-8)**
+- [ ] Create Discord bot with slash commands
+- [ ] Implement WebSocket gateway for unified access
+- [ ] Add reaction-based feedback capture
+- [ ] Create web widget component
+
+**Phase D: Polish (Weeks 9-12)**
+- [ ] macOS companion app with keyboard shortcut
+- [ ] Apple Watch complication for quick access
+- [ ] Cross-session knowledge queries
+- [ ] Advanced Siri Shortcuts (learn, recall, schedule)
+
+### Concepts Incorporated into A2I2
+
+| Concept | Application |
+|:--------|:------------|
+| **Gateway control plane** | Unified API for all channel integrations |
+| **Channel adapter pattern** | Pluggable interfaces per messaging platform |
+| **Chat commands** | Memory-aware slash commands (/recall, /learn) |
+| **Workspace injection** | Dynamic context from episodic + semantic memory |
+| **Sandbox execution** | Per-session Docker containers for enterprise |
+| **Session coordination** | Cross-user knowledge sharing via FOI principles |
+
+### Risk Mitigation
+
+| Risk | Mitigation |
+|:-----|:-----------|
+| WhatsApp Web connection stability | Reconnection logic, session persistence |
+| Channel API rate limits | Implement queuing, respect limits |
+| Memory context explosion | Context budget manager (already designed) |
+| Security across channels | Pairing policy, allowlists, Trust Ledger |
+| Siri transcription accuracy | Confirmation prompts, retry option |
+
+### Documentation
+
+- **Full Integration Plan:** [CLAWDBOT-INTEGRATION.md](.claude/skills/knowledge-repository/docs/CLAWDBOT-INTEGRATION.md)
+- **Multi-Channel Architecture:** [A2I2-MULTI-CHANNEL-ARCHITECTURE.md](.claude/skills/knowledge-repository/docs/A2I2-MULTI-CHANNEL-ARCHITECTURE.md)
+
+</details>
+
+<br/>
+
 ---
 
 <br/>
