@@ -279,7 +279,6 @@ class DiscordAdapter(ChannelAdapter):
 
             # Check if response should be an embed
             if message.metadata.get("embed"):
-                import discord
                 embed_data = message.metadata["embed"]
                 embed = discord.Embed(
                     title=embed_data.get("title", ""),
@@ -306,7 +305,6 @@ class DiscordAdapter(ChannelAdapter):
                     reference = None
                     if message.reply_to_id:
                         try:
-                            import discord
                             reference = discord.MessageReference(
                                 message_id=int(message.reply_to_id),
                                 channel_id=int(message.chat.chat_id),

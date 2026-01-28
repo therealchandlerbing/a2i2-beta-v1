@@ -394,10 +394,20 @@ class MessageProcessor:
             except Exception as e:
                 logger.warning(f"Routed model {model_id} failed: {e}, trying fallback")
                 if routing_decision.fallback_model:
-                    fallback_config = routing_decision.model_config  # Would need to look up fallback
                     logger.info(f"Trying fallback: {routing_decision.fallback_model}")
+                    try:
+                        # Determine provider from fallback model ID
+                        fallback_id = routing_decision.fallback_model
+                        if "claude" in fallback_id.lower():
+                            if self.config.anthropic_api_key:
+                                return await self._call_claude(system_prompt, messages, fallback_id)
+                        elif "gemini" in fallback_id.lower():
+                            if self.config.gemini_api_key:
+                                return await self._call_gemini(system_prompt, messages, fallback_id)
+                    except Exception as fallback_error:
+                        logger.warning(f"Fallback model {fallback_id} also failed: {fallback_error}")
 
-        # Fallback: Try Claude first
+        # Final fallback: Try Claude first
         if self.config.anthropic_api_key:
             try:
                 return await self._call_claude(system_prompt, messages)

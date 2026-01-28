@@ -169,7 +169,8 @@ class WebSocketAdapter(ChannelAdapter):
             self._connected = True
 
             # Start heartbeat task
-            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+            if self._heartbeat_task is None or self._heartbeat_task.done():
+                self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
             logger.info(f"WebSocket adapter listening on ws://{self.host}:{self.port}")
         except Exception as e:
@@ -382,13 +383,13 @@ class WebSocketAdapter(ChannelAdapter):
         """Send a message to a WebSocket client."""
         # Find the connection by chat_id (which is connection_id)
         connection_id = message.chat.chat_id
-        websocket = self._connections.get(connection_id)
+        conn_meta = self._connections.get(connection_id)
 
-        if not websocket:
+        if not conn_meta:
             return SendResult(success=False, error="Connection not found")
 
         try:
-            await self._send_json(websocket, {
+            await self._send_json(conn_meta.websocket, {
                 "type": "message",
                 "text": message.text,
                 "message_id": str(uuid.uuid4()),

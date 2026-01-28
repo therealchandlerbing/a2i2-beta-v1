@@ -64,7 +64,7 @@ class PairedDevice:
     channel: str
     paired_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     nickname: Optional[str] = None
-    metadata: Dict[str, any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -169,7 +169,7 @@ class PairingManager:
         device_id: str,
         channel: str,
         nickname: Optional[str] = None,
-        metadata: Optional[Dict[str, any]] = None
+        metadata: Optional[Dict[str, Any]] = None
     ) -> PairingResult:
         """
         Pair a device using a pairing code.
@@ -330,7 +330,7 @@ class PairingManager:
         if expired:
             logger.debug(f"Cleaned up {len(expired)} expired pairing codes")
 
-    def get_stats(self) -> Dict[str, any]:
+    def get_stats(self) -> Dict[str, Any]:
         """Get pairing statistics."""
         self._cleanup_expired_codes()
         return {
