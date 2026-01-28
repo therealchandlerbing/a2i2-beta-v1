@@ -214,13 +214,16 @@ class SessionManager:
         now = datetime.now(timezone.utc)
         current_hour = now.hour
 
-        # If we haven't done a reset yet today
+        # If we haven't done a reset yet
         if self._last_daily_reset is None:
             return current_hour >= self.daily_reset_hour
 
-        # Check if we've passed the reset hour since last reset
-        hours_since_reset = (now - self._last_daily_reset).total_seconds() / 3600
-        return hours_since_reset >= 24 and current_hour >= self.daily_reset_hour
+        # Use date-based checking to ensure only one reset per day
+        last_reset_date = self._last_daily_reset.date()
+        current_date = now.date()
+
+        # Only reset if we're on a different date AND past the reset hour
+        return current_date > last_reset_date and current_hour >= self.daily_reset_hour
 
     def _do_daily_reset(self) -> None:
         """Reset all sessions as part of daily reset policy."""

@@ -39,7 +39,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional
 
 from channel_adapter import (
     AccessPolicy,
@@ -196,7 +196,7 @@ class WebSocketAdapter(ChannelAdapter):
             try:
                 await conn_meta.websocket.close(code=1000, reason="Server shutting down")
             except Exception:
-                pass
+                pass  # Ignore errors during shutdown cleanup
 
         self._connections.clear()
         self._user_connections.clear()
@@ -240,7 +240,7 @@ class WebSocketAdapter(ChannelAdapter):
                         try:
                             await conn_meta.websocket.close(code=1001, reason="Connection timeout")
                         except Exception:
-                            pass
+                            pass  # Connection already closed or broken
                         del self._connections[conn_id]
 
                         # Remove from user mapping
@@ -441,7 +441,7 @@ class WebSocketAdapter(ChannelAdapter):
                 })
                 count += 1
             except Exception:
-                pass
+                pass  # Failure to send to one client shouldn't stop broadcast to others
         return count
 
     def get_stats(self) -> Dict[str, Any]:

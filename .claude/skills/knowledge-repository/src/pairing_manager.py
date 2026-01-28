@@ -22,7 +22,7 @@ Usage:
 """
 
 import logging
-import random
+import secrets
 import string
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -140,12 +140,12 @@ class PairingManager:
         if custom_code:
             code = custom_code
         else:
-            code = ''.join(random.choices(string.digits, k=self.code_length))
+            code = ''.join(secrets.choice(string.digits) for _ in range(self.code_length))
 
         # Ensure uniqueness
         attempts = 0
         while code in self._codes and attempts < 10:
-            code = ''.join(random.choices(string.digits, k=self.code_length))
+            code = ''.join(secrets.choice(string.digits) for _ in range(self.code_length))
             attempts += 1
 
         if code in self._codes:
@@ -160,7 +160,7 @@ class PairingManager:
         )
         self._codes[code] = pairing_code
 
-        logger.info(f"Generated pairing code {code} for user {user_id} on {channel}")
+        logger.info(f"Generated pairing code for user {user_id} on {channel}")
         return code
 
     def pair_device(
@@ -345,9 +345,13 @@ class PairingManager:
 # CONVENIENCE FUNCTIONS
 # =============================================================================
 
+# Global pairing manager instance
+_pairing_manager: Optional[PairingManager] = None
+
+
 def get_pairing_manager() -> PairingManager:
     """Get a global pairing manager instance."""
     global _pairing_manager
-    if '_pairing_manager' not in globals():
+    if _pairing_manager is None:
         _pairing_manager = PairingManager()
     return _pairing_manager

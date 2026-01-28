@@ -216,7 +216,7 @@ class DiscordAdapter(ChannelAdapter):
             content_type = MessageContentType.COMMAND
 
         # Detect if message is in a thread
-        is_thread = isinstance(msg.channel, (discord.Thread, discord.ThreadMember))
+        is_thread = isinstance(msg.channel, discord.Thread)
         thread_name = msg.channel.name if is_thread else None
         parent_channel_id = str(msg.channel.parent_id) if is_thread and hasattr(msg.channel, 'parent_id') else None
 
