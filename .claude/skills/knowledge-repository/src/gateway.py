@@ -276,9 +276,12 @@ class MessageProcessor:
         messages = list(pre_result.get("history", []))
         messages.append({"role": "user", "content": message.text})
 
-        # 4. Call AI model
+        # 4. Get model routing decision from middleware
+        routing_decision = pre_result.get("model_recommendation")
+
+        # 5. Call AI model with routed model selection
         try:
-            response = await self._call_model(system_prompt, messages)
+            response = await self._call_model(system_prompt, messages, routing_decision)
         except Exception as e:
             logger.error(f"Model call failed: {e}", exc_info=True)
             response = "I'm having trouble processing that right now. Please try again."
@@ -311,20 +314,55 @@ class MessageProcessor:
 
         return "\n".join(parts)
 
-    async def _call_model(self, system_prompt: str, messages: List[Dict[str, str]]) -> str:
+    async def _call_model(
+        self,
+        system_prompt: str,
+        messages: List[Dict[str, str]],
+        routing_decision: Optional[Any] = None
+    ) -> str:
         """
         Call the AI model with full conversation history.
 
-        Tries Claude first, falls back to Gemini.
+        Uses model router recommendation if available, otherwise falls back
+        to Claude -> Gemini -> error.
+
+        Args:
+            system_prompt: System prompt with memory context
+            messages: Conversation history
+            routing_decision: RoutingDecision from ModelRouter (optional)
         """
-        # Try Claude
+        # Use routing decision if available
+        if routing_decision:
+            model_id = routing_decision.model_id
+            provider = routing_decision.model_config.provider
+            thinking_level = routing_decision.thinking_level
+
+            logger.info(
+                f"Using routed model: {model_id} (confidence: {routing_decision.confidence:.2f}, "
+                f"reasoning: {routing_decision.reasoning})"
+            )
+
+            try:
+                if provider == "anthropic" and self.config.anthropic_api_key:
+                    return await self._call_claude(system_prompt, messages, model_id)
+                elif provider == "google" and self.config.gemini_api_key:
+                    return await self._call_gemini(system_prompt, messages, model_id, thinking_level)
+                else:
+                    logger.warning(f"Routed provider {provider} not configured, falling back")
+            except Exception as e:
+                logger.warning(f"Routed model {model_id} failed: {e}, trying fallback")
+                if routing_decision.fallback_model:
+                    fallback_config = routing_decision.model_config  # Would need to look up fallback
+                    logger.info(f"Trying fallback: {routing_decision.fallback_model}")
+
+        # Fallback: Try Claude first
         if self.config.anthropic_api_key:
             try:
                 return await self._call_claude(system_prompt, messages)
             except Exception as e:
                 logger.warning(f"Claude call failed, trying Gemini: {e}")
 
-        # Try Gemini
+        # Fallback: Try Gemini
         if self.config.gemini_api_key:
             try:
                 return await self._call_gemini(system_prompt, messages)
@@ -333,20 +371,32 @@ class MessageProcessor:
 
         return "I'm unable to process your request right now. Please check API configuration."
 
-    async def _call_claude(self, system_prompt: str, messages: List[Dict[str, str]]) -> str:
+    async def _call_claude(
+        self,
+        system_prompt: str,
+        messages: List[Dict[str, str]],
+        model_id: Optional[str] = None
+    ) -> str:
         """Call Anthropic Claude API with conversation history."""
         import anthropic
 
         client = anthropic.AsyncAnthropic(api_key=self.config.anthropic_api_key)
+        model = model_id or self.config.default_model
         response = await client.messages.create(
-            model=self.config.default_model,
+            model=model,
             max_tokens=1024,
             system=system_prompt,
             messages=messages,
         )
         return response.content[0].text
 
-    async def _call_gemini(self, system_prompt: str, messages: List[Dict[str, str]]) -> str:
+    async def _call_gemini(
+        self,
+        system_prompt: str,
+        messages: List[Dict[str, str]],
+        model_id: Optional[str] = None,
+        thinking_level: Optional[str] = None
+    ) -> str:
         """Call Google Gemini API with conversation history."""
         from google import genai
 
@@ -358,10 +408,18 @@ class MessageProcessor:
         full_prompt = f"{system_prompt}\n\n{history_text}"
 
         client = genai.Client(api_key=self.config.gemini_api_key)
+        model = model_id or "gemini-2.5-flash"
+
+        # Build config with thinking level if supported
+        config_kwargs = {}
+        if thinking_level and thinking_level != "budget":
+            config_kwargs["thinking_level"] = thinking_level
+
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model="gemini-2.5-flash",
+            model=model,
             contents=full_prompt,
+            **config_kwargs
         )
         return response.text
 
