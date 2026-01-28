@@ -12,12 +12,11 @@ Usage:
         ...
 """
 
-import asyncio
 import logging
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
@@ -100,7 +99,7 @@ class ChatContext:
 class InboundMessage:
     """A message received from any channel."""
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     channel: ChannelType = ChannelType.WEB
     content_type: MessageContentType = MessageContentType.TEXT
     text: str = ""
@@ -115,7 +114,7 @@ class InboundMessage:
 class OutboundMessage:
     """A message to send to a channel."""
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     text: str = ""
     chat: ChatContext = field(default_factory=lambda: ChatContext(chat_id="default"))
     attachments: List[Attachment] = field(default_factory=list)
@@ -129,7 +128,7 @@ class SendResult:
     success: bool
     message_id: Optional[str] = None
     error: Optional[str] = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass

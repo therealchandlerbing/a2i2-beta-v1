@@ -357,9 +357,12 @@ class ArcusMiddleware:
         return session
 
     def _flush_session(self, session: MiddlewareSession) -> None:
-        """Flush pending learnings from a session."""
+        """Flush pending learnings from a session. Failed learnings are retained."""
         if not session.pending_learnings:
             return
+
+        failed: List[Dict[str, Any]] = []
+        flushed = 0
 
         for learning in session.pending_learnings:
             try:
@@ -381,12 +384,16 @@ class ArcusMiddleware:
                         summary=learning["content"],
                         participants=learning.get("participants", [session.user_id]),
                     )
+                flushed += 1
             except Exception as e:
                 logger.error(f"Failed to flush learning: {e}")
+                failed.append(learning)
 
-        count = len(session.pending_learnings)
-        session.pending_learnings.clear()
-        logger.info(f"Flushed {count} learnings for {session.user_id}")
+        session.pending_learnings = failed
+        if failed:
+            logger.warning(f"Flushed {flushed} learnings for {session.user_id}, {len(failed)} failed and retained")
+        else:
+            logger.info(f"Flushed {flushed} learnings for {session.user_id}")
 
     # -------------------------------------------------------------------------
     # PRE-MESSAGE HOOK
@@ -569,12 +576,14 @@ class ArcusMiddleware:
         # Log to Trust Ledger
         if self.config.trust_tracking_enabled:
             try:
-                self.trust_engine.record_outcome(
-                    action=f"respond_on_{channel}",
-                    category=ActionCategory.COMMUNICATION if hasattr(ActionCategory, 'COMMUNICATION') else "communication",
-                    success=True,
-                    details={"channel": channel, "message_length": len(user_text)},
-                )
+                record_kwargs = {
+                    "action": f"respond_on_{channel}",
+                    "success": True,
+                    "details": {"channel": channel, "message_length": len(user_text)},
+                }
+                if hasattr(ActionCategory, "COMMUNICATION"):
+                    record_kwargs["category"] = ActionCategory.COMMUNICATION
+                self.trust_engine.record_outcome(**record_kwargs)
             except Exception as e:
                 logger.debug(f"Trust logging failed: {e}")
 

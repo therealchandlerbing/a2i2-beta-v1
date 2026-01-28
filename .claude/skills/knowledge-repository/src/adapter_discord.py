@@ -80,6 +80,7 @@ class DiscordAdapter(ChannelAdapter):
         self._client = None
         self._bot_user_id: Optional[int] = None
         self._run_task: Optional[asyncio.Task] = None
+        self._ready_event: asyncio.Event = asyncio.Event()
 
     # -------------------------------------------------------------------------
     # Lifecycle
@@ -102,9 +103,13 @@ class DiscordAdapter(ChannelAdapter):
         self._setup_event_handlers()
 
         # Run client in background
+        self._ready_event.clear()
         self._run_task = asyncio.create_task(self._start_client())
-        # Wait briefly for connection
-        await asyncio.sleep(2)
+        # Wait for on_ready with timeout instead of fixed sleep
+        try:
+            await asyncio.wait_for(self._ready_event.wait(), timeout=15.0)
+        except asyncio.TimeoutError:
+            logger.warning("Discord client did not become ready within 15s — continuing anyway")
         logger.info("Discord adapter started")
 
     async def _start_client(self) -> None:
@@ -137,6 +142,7 @@ class DiscordAdapter(ChannelAdapter):
         async def on_ready():
             self._connected = True
             self._bot_user_id = self._client.user.id
+            self._ready_event.set()
             logger.info(f"Discord bot ready as {self._client.user.name} ({self._bot_user_id})")
 
         @self._client.event

@@ -27,7 +27,7 @@ Usage:
 
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from channel_adapter import InboundMessage
@@ -218,15 +218,21 @@ class ChatCommandHandler:
         body = "\n".join(formatted)
         return f"{header}\n{body}"
 
+    @staticmethod
+    def _escape_like(value: str) -> str:
+        """Escape LIKE/ILIKE wildcards (% and _) and backslash."""
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
     def _fallback_recall(self, query: str, user_id: str) -> list:
         """Direct Supabase query fallback for recall."""
         results = []
         client = self._knowledge_repo.supabase
+        escaped = self._escape_like(query[:100])
 
         try:
             semantic = client.table("arcus_semantic_memory").select(
                 "category, content, confidence"
-            ).ilike("content", f"%{query[:100]}%").order(
+            ).ilike("content", f"%{escaped}%").order(
                 "confidence", desc=True
             ).limit(5).execute()
             for item in semantic.data or []:
@@ -238,7 +244,7 @@ class ChatCommandHandler:
         try:
             entities = client.table("arcus_entities").select(
                 "name, entity_type, summary"
-            ).ilike("name", f"%{query[:100]}%").limit(3).execute()
+            ).ilike("name", f"%{escaped}%").limit(3).execute()
             for item in entities.data or []:
                 item["memory_type"] = item.get("entity_type", "entity")
                 item["content"] = f"{item['name']}: {item.get('summary', 'N/A')}"
@@ -280,8 +286,9 @@ class ChatCommandHandler:
         client = self._knowledge_repo.supabase
 
         # Mark matching memories as low confidence (soft delete)
+        escaped = self._escape_like(args[:100])
         semantic = client.table("arcus_semantic_memory").select("id").ilike(
-            "content", f"%{args[:100]}%"
+            "content", f"%{escaped}%"
         ).execute()
 
         count = len(semantic.data or [])
@@ -467,23 +474,18 @@ class ChatCommandHandler:
             msg_count = session.message_count
             session_id = session.id[:8]
 
-            # Actually end the gateway session
-            if self._session_end_callback and hasattr(session, 'id'):
-                try:
+            # End both gateway and middleware sessions together
+            try:
+                if self._session_end_callback and hasattr(session, 'id'):
                     self._session_end_callback(session.id)
-                except Exception as e:
-                    logger.error(f"Failed to end session: {e}")
-
-            # End the middleware session too
-            if self.middleware and hasattr(session, 'user_id'):
-                try:
+                if self.middleware and hasattr(session, 'user_id'):
                     self.middleware.end_session(
                         user_id=session.user_id,
                         channel=session.channel.value if hasattr(session.channel, 'value') else str(session.channel),
                         chat_id=session.chat_id if hasattr(session, 'chat_id') else "",
                     )
-                except Exception as e:
-                    logger.error(f"Failed to end middleware session: {e}")
+            except Exception as e:
+                logger.error(f"Failed to end session cleanly: {e}", exc_info=True)
 
         return (
             f"Session `{session_id}...` ended.\n\n"
@@ -552,7 +554,20 @@ class ChatCommandHandler:
             return "Invalid level. Use `/verbose 0` through `/verbose 3`."
 
         if self.middleware:
-            self.middleware.config.verbosity_level = level
+            # Store per-session, not globally
+            session = kwargs.get("session")
+            user_id = kwargs.get("user_id", "")
+            channel_val = ""
+            chat_id_val = ""
+            if session:
+                user_id = getattr(session, "user_id", user_id)
+                channel_val = session.channel.value if hasattr(session.channel, "value") else str(getattr(session, "channel", ""))
+                chat_id_val = getattr(session, "chat_id", "")
+            mw_session = self.middleware.get_or_create_session(user_id, channel_val, chat_id_val) if user_id else None
+            if mw_session:
+                mw_session.verbosity_level = level
+            else:
+                self.middleware.config.verbosity_level = level
 
         return f"Verbosity set to **{level}** — {level_descriptions[level]}"
 

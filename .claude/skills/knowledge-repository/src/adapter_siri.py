@@ -37,7 +37,6 @@ Shortcut Setup:
 """
 
 import asyncio
-import hashlib
 import hmac
 import json
 import logging
@@ -186,7 +185,7 @@ class SiriWebhookAdapter(ChannelAdapter):
                 status=400,
             )
 
-        # Rate limit
+        # Rate limit (with periodic cleanup of stale entries)
         now = time.time()
         last_request = self._rate_limits.get(device_id, 0)
         if now - last_request < self._rate_limit_seconds:
@@ -195,6 +194,11 @@ class SiriWebhookAdapter(ChannelAdapter):
                 status=429,
             )
         self._rate_limits[device_id] = now
+
+        # Purge stale rate limit entries older than 1 hour
+        if len(self._rate_limits) > 100:
+            cutoff = now - 3600
+            self._rate_limits = {k: v for k, v in self._rate_limits.items() if v > cutoff}
 
         # Access check
         if self.access_policy != AccessPolicy.OPEN:

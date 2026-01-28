@@ -32,9 +32,6 @@ from channel_adapter import (
     ChannelType,
     InboundMessage,
     OutboundMessage,
-    SendResult,
-    ChatContext,
-    MessageContentType,
 )
 from memory_middleware import ArcusMiddleware, MiddlewareConfig
 
@@ -637,8 +634,8 @@ class ArcusGateway:
             logger.error(f"No adapter found for channel {original.channel.value}")
             return
 
-        # Chunk long messages for WhatsApp (2000 char limit)
-        max_len = 2000 if original.channel == ChannelType.WHATSAPP else 0
+        # Chunk long messages for WhatsApp (4096 char limit)
+        max_len = 4096 if original.channel == ChannelType.WHATSAPP else 0
         if max_len and len(text) > max_len:
             chunks = [text[i:i + max_len] for i in range(0, len(text), max_len)]
             for chunk in chunks:
