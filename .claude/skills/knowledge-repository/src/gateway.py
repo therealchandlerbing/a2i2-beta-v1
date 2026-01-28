@@ -70,6 +70,8 @@ class GatewayConfig:
     # Session
     session_timeout_minutes: int = 30
     max_sessions: int = 100
+    session_reset_policy: str = "idle"  # Options: "idle", "daily", "manual"
+    daily_reset_hour: int = 3  # Hour (0-23) for daily reset (UTC)
 
     @classmethod
     def from_env(cls) -> "GatewayConfig":
@@ -89,6 +91,8 @@ class GatewayConfig:
             auto_learn_enabled=os.getenv("ARCUS_AUTO_LEARN", "true").lower() == "true",
             session_timeout_minutes=int(os.getenv("ARCUS_SESSION_TIMEOUT", "30")),
             max_sessions=int(os.getenv("ARCUS_MAX_SESSIONS", "100")),
+            session_reset_policy=os.getenv("ARCUS_SESSION_RESET_POLICY", "idle"),
+            daily_reset_hour=int(os.getenv("ARCUS_DAILY_RESET_HOUR", "3")),
         )
 
 
@@ -122,13 +126,22 @@ class GatewaySession:
 
 
 class SessionManager:
-    """Manages gateway sessions with automatic cleanup."""
+    """Manages gateway sessions with automatic cleanup and reset policies."""
 
-    def __init__(self, max_sessions: int = 100, timeout_minutes: int = 30):
+    def __init__(
+        self,
+        max_sessions: int = 100,
+        timeout_minutes: int = 30,
+        reset_policy: str = "idle",
+        daily_reset_hour: int = 3
+    ):
         self._sessions: Dict[str, GatewaySession] = {}
         self._user_sessions: Dict[str, str] = {}  # user_key -> session_id
         self.max_sessions = max_sessions
         self.timeout_minutes = timeout_minutes
+        self.reset_policy = reset_policy
+        self.daily_reset_hour = daily_reset_hour
+        self._last_daily_reset: Optional[datetime] = None
 
     def _user_key(self, user_id: str, channel: ChannelType, chat_id: str) -> str:
         return f"{channel.value}:{user_id}:{chat_id}"
@@ -182,12 +195,41 @@ class SessionManager:
         return list(self._sessions.values())
 
     def _cleanup_expired(self) -> None:
-        """Remove expired sessions."""
-        expired = [sid for sid, s in self._sessions.items() if s.is_expired]
-        for sid in expired:
-            self.end(sid)
-        if expired:
-            logger.info(f"Cleaned up {len(expired)} expired sessions")
+        """Remove expired sessions based on reset policy."""
+        # Check for daily reset
+        if self.reset_policy == "daily" and self._should_daily_reset():
+            self._do_daily_reset()
+            return
+
+        # Regular idle timeout cleanup (for "idle" and "manual" policies)
+        if self.reset_policy in ["idle", "manual"]:
+            expired = [sid for sid, s in self._sessions.items() if s.is_expired]
+            for sid in expired:
+                self.end(sid)
+            if expired:
+                logger.info(f"Cleaned up {len(expired)} expired sessions (idle timeout)")
+
+    def _should_daily_reset(self) -> bool:
+        """Check if it's time for the daily reset."""
+        now = datetime.now(timezone.utc)
+        current_hour = now.hour
+
+        # If we haven't done a reset yet today
+        if self._last_daily_reset is None:
+            return current_hour >= self.daily_reset_hour
+
+        # Check if we've passed the reset hour since last reset
+        hours_since_reset = (now - self._last_daily_reset).total_seconds() / 3600
+        return hours_since_reset >= 24 and current_hour >= self.daily_reset_hour
+
+    def _do_daily_reset(self) -> None:
+        """Reset all sessions as part of daily reset policy."""
+        session_count = len(self._sessions)
+        if session_count > 0:
+            logger.info(f"Daily reset: clearing {session_count} sessions at {self.daily_reset_hour}:00 UTC")
+            for sid in list(self._sessions.keys()):
+                self.end(sid)
+        self._last_daily_reset = datetime.now(timezone.utc)
 
 
 # =============================================================================
@@ -459,6 +501,8 @@ class ArcusGateway:
         self.sessions = SessionManager(
             max_sessions=self.config.max_sessions,
             timeout_minutes=self.config.session_timeout_minutes,
+            reset_policy=self.config.session_reset_policy,
+            daily_reset_hour=self.config.daily_reset_hour,
         )
         self.events = EventBus()
 
