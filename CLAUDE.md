@@ -36,7 +36,20 @@ a2i2-beta-v1/
 │   │   └── PERSONAPLEX-INTEGRATION.md     # Voice integration
 │   ├── schemas/supabase-schema.sql        # Database schema
 │   ├── config/                            # Configuration files
+│   ├── CLAWDBOT-SKILL.md                  # ClawdBot skill manifest
 │   └── src/                               # Implementation code
+│       ├── knowledge_operations.py        # LEARN/RECALL/RELATE/REFLECT
+│       ├── model_router.py                # Task-based model selection
+│       ├── trust_engine.py                # Autonomy Trust Ledger
+│       ├── context_budget.py              # Context window management
+│       ├── memory_middleware.py            # Core middleware (pre/post hooks)
+│       ├── gateway.py                     # Multi-channel gateway control plane
+│       ├── gateway_server.py              # Gateway entry point
+│       ├── chat_commands.py               # Slash command implementations
+│       ├── channel_adapter.py             # Base adapter interface
+│       ├── adapter_whatsapp.py            # WhatsApp adapter (Baileys bridge)
+│       ├── adapter_discord.py             # Discord adapter (discord.py)
+│       └── adapter_siri.py               # Siri webhook adapter
 ├── brand-standards/arcus-innovation-studios/  # Brand guidelines
 ├── docs/A2I2-REFERENCE.md                 # Platform reference
 ├── CLAUDE.memory.md                       # Session memory (UPDATE THIS)

@@ -167,11 +167,9 @@ async def main() -> None:
     # Create gateway
     gateway = ArcusGateway(config)
 
-    # Set up chat commands
-    commands = ChatCommandHandler(
-        supabase_url=config.supabase_url,
-        supabase_key=config.supabase_key,
-    )
+    # Set up chat commands — wire to middleware for full A2I2 module integration
+    commands = ChatCommandHandler(middleware=gateway.middleware)
+    commands.set_session_end_callback(gateway.sessions.end)
     gateway.set_command_handler(commands.handle)
 
     # Determine which adapters to load

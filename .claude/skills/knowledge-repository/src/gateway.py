@@ -5,6 +5,10 @@ The central hub that connects all channel adapters to A2I2's memory and
 intelligence layer. Inspired by Clawdbot's single WebSocket control plane,
 adapted for A2I2's memory-aware, trust-gated architecture.
 
+In standalone mode, this runs the full gateway server. When used as a
+ClawdBot skill, only the ArcusMiddleware hooks are needed — the gateway
+delegates all intelligence to memory_middleware.py.
+
 Usage:
     from gateway import ArcusGateway
 
@@ -16,12 +20,11 @@ Usage:
 """
 
 import asyncio
-import json
 import logging
 import os
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from channel_adapter import (
@@ -33,6 +36,7 @@ from channel_adapter import (
     ChatContext,
     MessageContentType,
 )
+from memory_middleware import ArcusMiddleware, MiddlewareConfig
 
 logger = logging.getLogger("arcus.gateway")
 
@@ -98,20 +102,21 @@ class GatewaySession:
     user_id: str = ""
     channel: ChannelType = ChannelType.WEB
     chat_id: str = ""
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    last_activity: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_activity: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     message_count: int = 0
     context: Dict[str, Any] = field(default_factory=dict)
     memory_injected: bool = False
+    timeout_minutes: int = 30
 
     @property
     def is_expired(self) -> bool:
-        """Check if session has timed out (default 30 min)."""
-        return (datetime.utcnow() - self.last_activity) > timedelta(minutes=30)
+        """Check if session has timed out."""
+        return (datetime.now(timezone.utc) - self.last_activity) > timedelta(minutes=self.timeout_minutes)
 
     def touch(self) -> None:
         """Update last activity timestamp."""
-        self.last_activity = datetime.utcnow()
+        self.last_activity = datetime.now(timezone.utc)
         self.message_count += 1
 
 
@@ -154,6 +159,7 @@ class SessionManager:
             user_id=user_id,
             channel=channel,
             chat_id=chat_id,
+            timeout_minutes=self.timeout_minutes,
         )
         self._sessions[session.id] = session
         self._user_sessions[key] = session.id
@@ -191,7 +197,7 @@ class SessionManager:
 class GatewayEvent:
     """An event emitted by the gateway."""
     type: str               # e.g., "message.received", "session.created"
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     session_id: Optional[str] = None
     channel: Optional[ChannelType] = None
     data: Dict[str, Any] = field(default_factory=dict)
@@ -221,129 +227,23 @@ class EventBus:
 
 
 # =============================================================================
-# MEMORY CONTEXT INJECTOR
-# =============================================================================
-
-class MemoryContextInjector:
-    """
-    Injects relevant A2I2 memory context into messages before AI processing.
-
-    Queries episodic, semantic, and relational memory to provide the AI with
-    context about the user, their preferences, and relevant history.
-    """
-
-    def __init__(self, config: GatewayConfig):
-        self.config = config
-        self._supabase = None
-
-    async def _get_client(self):
-        """Lazy-init Supabase client."""
-        if self._supabase is None and self.config.supabase_url:
-            try:
-                from supabase import create_client
-                self._supabase = create_client(
-                    self.config.supabase_url,
-                    self.config.supabase_key,
-                )
-            except ImportError:
-                logger.warning("supabase package not installed, memory injection disabled")
-        return self._supabase
-
-    async def get_context(self, user_id: str, query: str = "") -> Dict[str, Any]:
-        """
-        Retrieve relevant memory context for a user and query.
-
-        Returns:
-            Dict with keys: preferences, recent_episodes, relevant_entities, relationships
-        """
-        client = await self._get_client()
-        if not client:
-            return {"preferences": [], "recent_episodes": [], "relevant_entities": [], "relationships": []}
-
-        context: Dict[str, Any] = {
-            "preferences": [],
-            "recent_episodes": [],
-            "relevant_entities": [],
-            "relationships": [],
-        }
-
-        try:
-            # Fetch user preferences (procedural memory)
-            prefs = client.table("arcus_procedural_memory").select(
-                "procedure_name, content, confidence"
-            ).eq("user_id", user_id).eq(
-                "procedure_type", "preference"
-            ).order("confidence", desc=True).limit(10).execute()
-            context["preferences"] = prefs.data or []
-
-            # Fetch recent episodic memories
-            episodes = client.table("arcus_episodic_memory").select(
-                "event_type, summary, significance"
-            ).eq("user_id", user_id).order(
-                "created_at", desc=True
-            ).limit(5).execute()
-            context["recent_episodes"] = episodes.data or []
-
-            # Fetch relevant entities if query provided
-            if query:
-                entities = client.table("arcus_entities").select(
-                    "name, entity_type, summary"
-                ).eq("user_id", user_id).ilike(
-                    "name", f"%{query[:50]}%"
-                ).limit(5).execute()
-                context["relevant_entities"] = entities.data or []
-
-        except Exception as e:
-            logger.error(f"Memory context fetch error: {e}", exc_info=True)
-
-        return context
-
-    def format_context_block(self, context: Dict[str, Any]) -> str:
-        """Format memory context as a text block for AI injection."""
-        parts = []
-
-        if context.get("preferences"):
-            prefs_text = "\n".join(
-                f"- {p['procedure_name']}: {p['content']}"
-                for p in context["preferences"][:5]
-            )
-            parts.append(f"**User Preferences:**\n{prefs_text}")
-
-        if context.get("recent_episodes"):
-            eps_text = "\n".join(
-                f"- [{e['event_type']}] {e['summary']}"
-                for e in context["recent_episodes"][:3]
-            )
-            parts.append(f"**Recent Activity:**\n{eps_text}")
-
-        if context.get("relevant_entities"):
-            ents_text = "\n".join(
-                f"- {e['name']} ({e['entity_type']}): {e.get('summary', 'N/A')}"
-                for e in context["relevant_entities"][:3]
-            )
-            parts.append(f"**Related Entities:**\n{ents_text}")
-
-        return "\n\n".join(parts) if parts else ""
-
-
-# =============================================================================
-# AI MESSAGE PROCESSOR
+# AI MESSAGE PROCESSOR (uses ArcusMiddleware)
 # =============================================================================
 
 class MessageProcessor:
     """
     Processes inbound messages through the AI model with memory context.
 
-    Handles:
-    1. Memory context injection
-    2. Model routing (Claude/Gemini based on task)
-    3. Response generation
-    4. Auto-learning from interactions
+    Delegates to ArcusMiddleware for:
+    1. Memory context injection (pre-message hook)
+    2. Model routing via ModelRouter
+    3. Learning extraction (post-message hook)
+    4. Trust ledger logging
     """
 
-    def __init__(self, config: GatewayConfig, memory: MemoryContextInjector):
+    def __init__(self, config: GatewayConfig, middleware: ArcusMiddleware):
         self.config = config
-        self.memory = memory
+        self.middleware = middleware
 
     async def process(
         self, message: InboundMessage, session: GatewaySession
@@ -351,32 +251,48 @@ class MessageProcessor:
         """
         Process an inbound message and return a text response.
 
-        Args:
-            message: The inbound message from any channel
-            session: The active session for context
-
-        Returns:
-            Response text string
+        Flow:
+        1. Pre-message hook (memory injection, model routing)
+        2. Build prompt with conversation history
+        3. Call AI model
+        4. Post-message hook (learning extraction, trust logging)
         """
-        # Build context
-        memory_context = {}
-        if self.config.memory_injection_enabled:
-            memory_context = await self.memory.get_context(
-                user_id=message.user.arcus_user_id or message.user.channel_user_id,
-                query=message.text,
-            )
+        user_id = message.user.arcus_user_id or message.user.channel_user_id
+        channel = message.channel.value
 
-        context_block = self.memory.format_context_block(memory_context)
+        # 1. Pre-message hook — memory injection + model routing
+        pre_result = await self.middleware.pre_message(
+            text=message.text,
+            user_id=user_id,
+            channel=channel,
+            chat_id=message.chat.chat_id,
+        )
 
-        # Build prompt
-        system_prompt = self._build_system_prompt(session, context_block)
+        # 2. Build system prompt with memory context
+        system_prompt = self._build_system_prompt(session, pre_result.get("system_context", ""))
 
-        # Route to model
+        # 3. Build messages with conversation history
+        messages = list(pre_result.get("history", []))
+        messages.append({"role": "user", "content": message.text})
+
+        # 4. Call AI model
         try:
-            response = await self._call_model(system_prompt, message.text)
+            response = await self._call_model(system_prompt, messages)
         except Exception as e:
             logger.error(f"Model call failed: {e}", exc_info=True)
             response = "I'm having trouble processing that right now. Please try again."
+
+        # 5. Post-message hook — learning extraction + trust logging
+        try:
+            await self.middleware.post_message(
+                user_text=message.text,
+                ai_response=response,
+                user_id=user_id,
+                channel=channel,
+                chat_id=message.chat.chat_id,
+            )
+        except Exception as e:
+            logger.error(f"Post-message hook failed: {e}", exc_info=True)
 
         return response
 
@@ -390,34 +306,34 @@ class MessageProcessor:
         ]
 
         if context_block:
-            parts.append(f"\n--- Memory Context ---\n{context_block}\n--- End Context ---")
+            parts.append(context_block)
 
         return "\n".join(parts)
 
-    async def _call_model(self, system_prompt: str, user_message: str) -> str:
+    async def _call_model(self, system_prompt: str, messages: List[Dict[str, str]]) -> str:
         """
-        Call the AI model (Claude or Gemini) and return the response.
+        Call the AI model with full conversation history.
 
         Tries Claude first, falls back to Gemini.
         """
         # Try Claude
         if self.config.anthropic_api_key:
             try:
-                return await self._call_claude(system_prompt, user_message)
+                return await self._call_claude(system_prompt, messages)
             except Exception as e:
                 logger.warning(f"Claude call failed, trying Gemini: {e}")
 
         # Try Gemini
         if self.config.gemini_api_key:
             try:
-                return await self._call_gemini(system_prompt, user_message)
+                return await self._call_gemini(system_prompt, messages)
             except Exception as e:
                 logger.error(f"Gemini call also failed: {e}")
 
         return "I'm unable to process your request right now. Please check API configuration."
 
-    async def _call_claude(self, system_prompt: str, user_message: str) -> str:
-        """Call Anthropic Claude API."""
+    async def _call_claude(self, system_prompt: str, messages: List[Dict[str, str]]) -> str:
+        """Call Anthropic Claude API with conversation history."""
         import anthropic
 
         client = anthropic.AsyncAnthropic(api_key=self.config.anthropic_api_key)
@@ -425,19 +341,26 @@ class MessageProcessor:
             model=self.config.default_model,
             max_tokens=1024,
             system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
+            messages=messages,
         )
         return response.content[0].text
 
-    async def _call_gemini(self, system_prompt: str, user_message: str) -> str:
-        """Call Google Gemini API."""
+    async def _call_gemini(self, system_prompt: str, messages: List[Dict[str, str]]) -> str:
+        """Call Google Gemini API with conversation history."""
         from google import genai
+
+        # Format history for Gemini
+        history_text = "\n".join(
+            f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
+            for m in messages
+        )
+        full_prompt = f"{system_prompt}\n\n{history_text}"
 
         client = genai.Client(api_key=self.config.gemini_api_key)
         response = await asyncio.to_thread(
             client.models.generate_content,
             model="gemini-2.5-flash",
-            contents=f"{system_prompt}\n\nUser: {user_message}",
+            contents=full_prompt,
         )
         return response.text
 
@@ -451,11 +374,15 @@ class ArcusGateway:
     The Arcus Multi-Channel Gateway.
 
     Central control plane that connects channel adapters to A2I2's intelligence
-    layer. Manages sessions, routes messages, injects memory context, and
+    layer via ArcusMiddleware. Manages sessions, routes messages, and
     coordinates AI responses across all channels.
 
+    The gateway can run in two modes:
+    1. Standalone: Full server with adapters and AI processing
+    2. ClawdBot skill: Only the middleware hooks are used
+
     Architecture (inspired by Clawdbot):
-        Channels → Gateway → Memory + AI → Response → Channel
+        Channels → Gateway → Middleware (pre-hook) → AI → Middleware (post-hook) → Channel
 
     Usage:
         config = GatewayConfig.from_env()
@@ -475,8 +402,17 @@ class ArcusGateway:
             timeout_minutes=self.config.session_timeout_minutes,
         )
         self.events = EventBus()
-        self.memory = MemoryContextInjector(self.config)
-        self.processor = MessageProcessor(self.config, self.memory)
+
+        # Initialize middleware (connects all A2I2 modules)
+        self.middleware = ArcusMiddleware(MiddlewareConfig(
+            supabase_url=self.config.supabase_url,
+            supabase_key=self.config.supabase_key,
+            memory_injection_enabled=self.config.memory_injection_enabled,
+            max_context_tokens=self.config.max_context_tokens,
+            auto_learn_enabled=self.config.auto_learn_enabled,
+        ))
+
+        self.processor = MessageProcessor(self.config, self.middleware)
         self._adapters: Dict[str, ChannelAdapter] = {}
         self._running = False
         self._command_handler: Optional[Callable] = None
@@ -489,6 +425,8 @@ class ArcusGateway:
         """Register a channel adapter with the gateway."""
         self._adapters[adapter.name] = adapter
         adapter.on_message(self._handle_inbound)
+        # Wire reaction handlers to middleware
+        adapter.on_reaction(self._handle_reaction)
         logger.info(f"Registered adapter: {adapter.name} ({adapter.channel_type.value})")
 
     def set_command_handler(self, handler: Callable) -> None:
@@ -531,6 +469,12 @@ class ArcusGateway:
         logger.info("Stopping Arcus Gateway...")
         self._running = False
 
+        # Flush all middleware sessions
+        for key in list(self.middleware._sessions.keys()):
+            session = self.middleware._sessions.get(key)
+            if session:
+                self.middleware._flush_session(session)
+
         for name, adapter in self._adapters.items():
             try:
                 await adapter.disconnect()
@@ -550,18 +494,26 @@ class ArcusGateway:
         Central message handler — called by all adapters.
 
         Flow:
-        1. Get or create session
-        2. Emit event
-        3. Check for commands
-        4. Process through AI with memory context
-        5. Send response back through adapter
+        1. Resolve cross-channel identity
+        2. Get or create session
+        3. Emit event
+        4. Send typing indicator
+        5. Check for commands
+        6. Process through AI with middleware hooks
+        7. Send response back through adapter
         """
         if not self._running:
             return
 
+        # Resolve cross-channel identity
+        user_id = message.user.arcus_user_id or message.user.channel_user_id
+        resolved = self.middleware.resolve_identity(user_id, message.channel.value)
+        if resolved:
+            message.user.arcus_user_id = resolved
+
         # Get session
         session = self.sessions.get_or_create(
-            user_id=message.user.arcus_user_id or message.user.channel_user_id,
+            user_id=message.user.arcus_user_id or user_id,
             channel=message.channel,
             chat_id=message.chat.chat_id,
         )
@@ -572,11 +524,14 @@ class ArcusGateway:
             session_id=session.id,
             channel=message.channel,
             data={
-                "user": message.user.channel_user_id,
+                "user": user_id,
                 "text_length": len(message.text),
                 "content_type": message.content_type.value,
             },
         ))
+
+        # Send typing indicator (non-blocking)
+        self._send_typing_indicator(message)
 
         # Check for slash commands
         if message.text.startswith("/") and self._command_handler:
@@ -588,7 +543,7 @@ class ArcusGateway:
             except Exception as e:
                 logger.error(f"Command handler error: {e}", exc_info=True)
 
-        # Process through AI
+        # Process through AI with middleware hooks
         response_text = await self.processor.process(message, session)
 
         # Send response
@@ -602,11 +557,34 @@ class ArcusGateway:
             data={"response_length": len(response_text)},
         ))
 
+    async def _handle_reaction(self, message_id: str, emoji: str, user) -> None:
+        """Handle reactions — delegate to middleware for reward signals."""
+        try:
+            await self.middleware.on_reaction(
+                message_id=message_id,
+                emoji=emoji,
+                user_id=user.channel_user_id,
+                channel=user.metadata.get("channel", "unknown") if hasattr(user, 'metadata') else "unknown",
+            )
+        except Exception as e:
+            logger.error(f"Reaction handling failed: {e}", exc_info=True)
+
+    def _send_typing_indicator(self, message: InboundMessage) -> None:
+        """Send a typing indicator (fire-and-forget)."""
+        adapter = self._adapters.get(message.channel.value)
+        if not adapter:
+            for a in self._adapters.values():
+                if a.channel_type == message.channel:
+                    adapter = a
+                    break
+
+        if adapter and hasattr(adapter, '_send_typing'):
+            asyncio.create_task(adapter._send_typing(message.chat.chat_id))
+
     async def _send_response(self, original: InboundMessage, text: str) -> None:
-        """Send a response back through the originating channel."""
+        """Send a response back through the originating channel, chunking if needed."""
         adapter = self._adapters.get(original.channel.value)
         if not adapter:
-            # Try to find by channel type
             for a in self._adapters.values():
                 if a.channel_type == original.channel:
                     adapter = a
@@ -616,14 +594,27 @@ class ArcusGateway:
             logger.error(f"No adapter found for channel {original.channel.value}")
             return
 
-        result = await adapter.send(OutboundMessage(
-            text=text,
-            chat=original.chat,
-            reply_to_id=original.id,
-        ))
-
-        if not result.success:
-            logger.error(f"Failed to send response: {result.error}")
+        # Chunk long messages for WhatsApp (2000 char limit)
+        max_len = 2000 if original.channel == ChannelType.WHATSAPP else 0
+        if max_len and len(text) > max_len:
+            chunks = [text[i:i + max_len] for i in range(0, len(text), max_len)]
+            for chunk in chunks:
+                result = await adapter.send(OutboundMessage(
+                    text=chunk,
+                    chat=original.chat,
+                    reply_to_id=original.id,
+                ))
+                if not result.success:
+                    logger.error(f"Failed to send chunk: {result.error}")
+                    break
+        else:
+            result = await adapter.send(OutboundMessage(
+                text=text,
+                chat=original.chat,
+                reply_to_id=original.id,
+            ))
+            if not result.success:
+                logger.error(f"Failed to send response: {result.error}")
 
     # -------------------------------------------------------------------------
     # Status & info
@@ -631,6 +622,7 @@ class ArcusGateway:
 
     def status(self) -> Dict[str, Any]:
         """Get gateway status summary."""
+        middleware_status = self.middleware.status()
         return {
             "running": self._running,
             "adapters": {
@@ -645,6 +637,7 @@ class ArcusGateway:
                 "active": len(self.sessions.list_active()),
                 "max": self.config.max_sessions,
             },
+            "middleware": middleware_status,
             "config": {
                 "memory_injection": self.config.memory_injection_enabled,
                 "auto_learn": self.config.auto_learn_enabled,

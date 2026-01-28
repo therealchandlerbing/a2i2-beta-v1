@@ -44,9 +44,27 @@
 | File | Purpose | Status |
 |------|---------|--------|
 | [src/knowledge_operations.py](src/knowledge_operations.py) | Python LEARN/RECALL/RELATE/REFLECT | **Ready** |
+| [src/model_router.py](src/model_router.py) | Task-based model selection | **Ready** |
+| [src/trust_engine.py](src/trust_engine.py) | Autonomy Trust Ledger | **Ready** |
+| [src/context_budget.py](src/context_budget.py) | Context window management | **Ready** |
+| [src/memory_middleware.py](src/memory_middleware.py) | Core middleware — pre/post hooks, learning pipeline | **Ready** |
+| [src/gateway.py](src/gateway.py) | Multi-channel gateway control plane | **Ready** |
+| [src/gateway_server.py](src/gateway_server.py) | Gateway entry point | **Ready** |
+| [src/chat_commands.py](src/chat_commands.py) | Slash command implementations (/recall, /learn, etc.) | **Ready** |
+| [src/channel_adapter.py](src/channel_adapter.py) | Base adapter interface & message types | **Ready** |
+| [src/adapter_whatsapp.py](src/adapter_whatsapp.py) | WhatsApp adapter (Baileys bridge) | **Ready** |
+| [src/adapter_discord.py](src/adapter_discord.py) | Discord adapter (discord.py) | **Ready** |
+| [src/adapter_siri.py](src/adapter_siri.py) | Siri webhook adapter | **Ready** |
 | [src/types.ts](src/types.ts) | TypeScript type definitions | **Ready** |
 | src/knowledge-client.ts | Supabase client wrapper | Planned |
 | src/context-manager.ts | Session context loading | Planned |
+
+## ClawdBot Integration
+
+| File | Purpose | Read When... |
+|------|---------|--------------|
+| [CLAWDBOT-SKILL.md](CLAWDBOT-SKILL.md) | ClawdBot skill manifest (hooks, commands, dependencies) | Deploying as a ClawdBot skill |
+| [docs/CLAWDBOT-INTEGRATION.md](docs/CLAWDBOT-INTEGRATION.md) | ClawdBot integration architecture | Understanding multi-channel setup |
 
 ## Session State
 
@@ -77,6 +95,12 @@
 1. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module system
 2. Check `modules/` directory for examples
 3. Follow module interface in [SKILL.md](SKILL.md)
+
+### "I want to deploy the multi-channel gateway"
+1. [CLAWDBOT-SKILL.md](CLAWDBOT-SKILL.md) for skill manifest
+2. [src/gateway_server.py](src/gateway_server.py) for standalone entry point
+3. [src/requirements-gateway.txt](src/requirements-gateway.txt) for dependencies
+4. Configure adapters via `.env.example`
 
 ### "I want to add voice capabilities"
 1. **Start here**: [docs/PRACTICAL-IMPLEMENTATION.md](docs/PRACTICAL-IMPLEMENTATION.md)
