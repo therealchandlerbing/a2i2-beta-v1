@@ -600,14 +600,14 @@ class ArcusGateway:
             data={"response_length": len(response_text)},
         ))
 
-    async def _handle_reaction(self, message_id: str, emoji: str, user) -> None:
+    async def _handle_reaction(self, message_id: str, emoji: str, user: "UserIdentity", channel: ChannelType) -> None:
         """Handle reactions — delegate to middleware for reward signals."""
         try:
             await self.middleware.on_reaction(
                 message_id=message_id,
                 emoji=emoji,
                 user_id=user.channel_user_id,
-                channel=user.metadata.get("channel", "unknown") if hasattr(user, 'metadata') else "unknown",
+                channel=channel.value,
             )
         except Exception as e:
             logger.error(f"Reaction handling failed: {e}", exc_info=True)

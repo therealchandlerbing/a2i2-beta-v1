@@ -232,8 +232,8 @@ class ChatCommandHandler:
             for item in semantic.data or []:
                 item["memory_type"] = item.get("category", "semantic")
                 results.append(item)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Fallback semantic recall failed: {e}")
 
         try:
             entities = client.table("arcus_entities").select(
@@ -243,8 +243,8 @@ class ChatCommandHandler:
                 item["memory_type"] = item.get("entity_type", "entity")
                 item["content"] = f"{item['name']}: {item.get('summary', 'N/A')}"
                 results.append(item)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Fallback entities recall failed: {e}")
 
         return results
 

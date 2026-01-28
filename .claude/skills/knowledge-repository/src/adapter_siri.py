@@ -273,15 +273,5 @@ class SiriWebhookAdapter(ChannelAdapter):
             future = self._pending_responses.get(message.reply_to_id)
 
         if not future:
-            # Try to find any pending response for this chat
-            for msg_id, f in list(self._pending_responses.items()):
-                if not f.done():
-                    future = f
-                    break
-
-        if future and not future.done():
-            future.set_result(message.text)
-            return SendResult(success=True, message_id=message.reply_to_id)
-
-        logger.warning("Siri send called but no pending webhook response found")
-        return SendResult(success=False, error="No pending webhook request")
+            logger.warning(f"Siri send called but no pending webhook response found for reply_to_id {message.reply_to_id}")
+            return SendResult(success=False, error="No pending webhook request for the given message ID")

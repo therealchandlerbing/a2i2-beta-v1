@@ -142,7 +142,7 @@ class AccessDecision:
 
 # Type alias for message handlers
 MessageHandler = Callable[[InboundMessage], Coroutine[Any, Any, None]]
-ReactionHandler = Callable[[str, str, UserIdentity], Coroutine[Any, Any, None]]
+ReactionHandler = Callable[["str", "str", "UserIdentity", "ChannelType"], Coroutine[Any, Any, None]]
 
 
 # =============================================================================
@@ -297,6 +297,6 @@ class ChannelAdapter(ABC):
         """Dispatch a reaction event to all registered handlers."""
         for handler in self._reaction_handlers:
             try:
-                await handler(message_id, emoji, user)
+                await handler(message_id, emoji, user, self.channel_type)
             except Exception as e:
                 self._logger.error(f"Reaction handler error on {self.name}: {e}", exc_info=True)
